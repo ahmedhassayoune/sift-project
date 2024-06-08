@@ -1,0 +1,89 @@
+# Compiled object files
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Compiled Static libraries
+*.lib
+*.a
+
+# Executable files
+*.exe
+*.out
+*.app
+
+# Debug files
+*.dSYM/
+*.stackdump
+*.log
+
+# IDE specific files
+# CLion
+.idea/
+cmake-build-debug/
+cmake-build-release/
+
+# Visual Studio
+.vscode/
+.vscode/*
+
+# Xcode
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+xcuserdata
+*.xcuserdatad
+*.xcscmblueprint
+
+# CMake generated files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CMakeLists.txt.user
+CTestTestfile.cmake
+
+# Qt Creator
+*.pro.user
+*.pro.user.*
+*.qmake.stash
+*.qmake.cache
+
+# Code::Blocks
+*.depend
+*.layout
+
+# Eclipse
+.project
+.cproject
+
+# Sublime Text
+*.sublime-workspace
+*.sublime-project
+
+# JetBrains Rider
+.idea/
+.idea/*
+
+# OS specific files
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
