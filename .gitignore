@@ -30,6 +30,7 @@
 .idea/
 cmake-build-debug/
 cmake-build-release/
+*.swp
 
 # Visual Studio
 .vscode/
