@@ -209,11 +209,35 @@ static void calculateGradients(const Image& gaussian_image, int window_row, int 
     dy = gaussian_image.getPixel(window_col, window_row - 1) - gaussian_image.getPixel(window_col, window_row + 1);
 }
 
+#define CALCULATE_BINS(rot, hist_width, bin) \
+    bin = ((rot) / (hist_width)) + 0.5f * 4 - 0.5f;
+
+static void computeBinsAndMagnitudes(
+    const Image& gaussian_image,
+    float row_rot, float col_rot,
+    float hist_width, float sin_angle, float cos_angle,
+    float& row_bin, float& col_bin, float& magnitude, float& orientation) {
+    
+    float weight_multiplier = -0.5f / ((0.5f * 4) * (0.5f * 4));
+    float dx, dy;
+    calculateGradients(gaussian_image, static_cast<int>(col_rot), static_cast<int>(row_rot), dx, dy);
+    magnitude = std::sqrt(dx * dx + dy * dy);
+    orientation = std::atan2(dy, dx) * 180.0f / M_PI;
+    if (orientation < 0)
+        orientation += 360.0f;
+
+    CALCULATE_BINS(row_rot, hist_width, row_bin);
+    CALCULATE_BINS(col_rot, hist_width, col_bin);
+    
+    float weight = std::exp(weight_multiplier * ((row_rot / hist_width) * (row_rot / hist_width) + (col_rot / hist_width) * (col_rot / hist_width)));
+    magnitude *= weight;
+}
+
 /*
     Etapes du papier:
-        -	Décomposer l’octave, la couche et l’échelle d’un keypoint
-        -   Calculer les gradients.
-        -   Calculer les bins et les magnitudes des gradients.
+        -	Décomposer l’octave, la couche et l’échelle d’un keypoint (ok)
+        -   Calculer les gradients. (ok)
+        -   Calculer les bins et les magnitudes des gradients. 
         -   Interpolation trilineaire (pour le lissage de l'histo).
         -   Normalisation et conversion des descripteurs.
 
