@@ -5,6 +5,14 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
+/// @brief Default constructor.
+Image::Image()
+  : width(0)
+  , height(0)
+  , channels(0)
+  , data()
+{}
+
 /// @brief Construct an image with the given dimensions and number of channels.
 /// @param w Width
 /// @param h Height
@@ -36,6 +44,12 @@ Image::Image(const char* filename)
   std::copy(ptr, ptr + w * h * c, data.begin());
   stbi_image_free(ptr);
 }
+
+/// @brief Load an image from a file.
+/// @param filename Path to the image file
+Image::Image(const std::string filename)
+  : Image(filename.c_str())
+{}
 
 /// @brief Copy constructor.
 /// @param other Image to copy
@@ -94,13 +108,21 @@ void Image::set_pixel(int x, int y, Channel c, std::uint8_t value)
   data[(y * width + x) * channels + c] = value;
 }
 
-/// @brief Save the image to a file.
-/// @param filename
+/// @brief Save the image to PNG format.
+/// @param filename Path to the image file
 /// @return True if the image was saved successfully
 bool Image::save(const char* filename) const
 {
   return stbi_write_png(filename, width, height, channels, data.data(),
                         width * channels);
+}
+
+/// @brief Save the image to PNG format.
+/// @param filename Path to the image file
+/// @return True if the image was saved successfully
+bool Image::save(const std::string filename) const
+{
+  return save(filename.c_str());
 }
 
 /// @brief Indexing methods

@@ -2,11 +2,60 @@
 
 #include <cmath>
 
+/// @brief Convert an image to grayscale
+/// @param img The image to convert
+/// @return The grayscale image
+Image convert_to_grayscale(const Image& img)
+{
+  Image new_img(img.width, img.height, 1);
+  for (int i = 0; i < new_img.width; i++)
+    {
+      for (int j = 0; j < new_img.height; j++)
+        {
+          std::uint8_t r = img(i, j, RED);
+          std::uint8_t g = img(i, j, GREEN);
+          std::uint8_t b = img(i, j, BLUE);
+          std::uint8_t value = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+          new_img.set_pixel(i, j, GRAY, value);
+        }
+    }
+  return new_img;
+}
+
+/// @brief Subtract two images (img1 - img2)
+/// @param img1 Image 1
+/// @param img2 Image 2
+/// @return The subtracted image
+Image subtract(const Image& img1, const Image& img2)
+{
+  Image new_img(img1.width, img1.height, img1.channels);
+  for (int i = 0; i < new_img.width; i++)
+    {
+      for (int j = 0; j < new_img.height; j++)
+        {
+          for (int k = 0; k < new_img.channels; k++)
+            {
+              Channel c = static_cast<Channel>(k);
+
+              std::uint8_t p1 = img1(i, j, c);
+              std::uint8_t p2 = img2(i, j, c);
+              std::uint8_t value = (p1 > p2) ? p1 - p2 : 0;
+              new_img.set_pixel(i, j, c, value);
+            }
+        }
+    }
+  return new_img;
+}
+
 /// @brief Resize an image to half its size using nearest neighbor interpolation
 /// @param img The image to resize
 /// @return The resized image
 Image resize_inter_nearest(const Image& img)
 {
+  if (img.width < 2 || img.height < 2)
+    {
+      throw std::runtime_error("Image is too small to resize");
+    }
   Image new_img(img.width / 2, img.height / 2, img.channels);
   for (int i = 0; i < new_img.width; i++)
     {

@@ -2,6 +2,8 @@
 
 #include "image_io.hh"
 
+Image convert_to_grayscale(const Image& img);
+Image subtract(const Image& img1, const Image& img2);
 Image resize_inter_nearest(const Image& img);
 Image resize_inter_bilinear(const Image& img, int fx, int fy);
 Image apply_convolution(const Image& img, const std::vector<float>& kernel);
