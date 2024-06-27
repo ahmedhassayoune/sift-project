@@ -1,4 +1,5 @@
 # Compiled object files
+stab
 *.o
 *.obj
 

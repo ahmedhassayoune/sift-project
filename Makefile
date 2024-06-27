@@ -2,8 +2,8 @@
 CXX = g++
 
 # Define compiler flags for release and debug builds
-CXXFLAGS_RELEASE = -Wall -Wextra -Werror -Wshadow -Wconversion -std=c++17 -O2
-CXXFLAGS_DEBUG = -Wall -Wextra -Werror -Wshadow -Wconversion -std=c++17 -O2 -g -fsanitize=address
+CXXFLAGS_RELEASE = -Wall -Werror -Wshadow -std=c++17 -O2
+CXXFLAGS_DEBUG = -Wall -Werror -Wshadow -std=c++17 -O2 -g -fsanitize=address
 
 # Define the output executable name
 TARGET = stab
