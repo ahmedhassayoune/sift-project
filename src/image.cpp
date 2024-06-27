@@ -1,5 +1,7 @@
 #include "image.hh"
 
+#include <cmath>
+
 /// @brief Resize an image to half its size using nearest neighbor interpolation
 /// @param img The image to resize
 /// @return The resized image
@@ -55,4 +57,79 @@ Image resize_inter_bilinear(const Image& img, int fx, int fy)
         }
     }
   return new_img;
+}
+
+/// @brief Apply a convolution kernel to an image
+/// @param img Image to apply the convolution to
+/// @param kernel Convolution kernel
+/// @return The convolved image
+Image apply_convolution(const Image& img, const std::vector<float>& kernel)
+{
+  int kernel_size = std::sqrt(kernel.size());
+  int kernel_radius = kernel_size / 2;
+  Image new_img(img.width, img.height, img.channels);
+
+  for (int i = 0; i < new_img.width; i++)
+    {
+      for (int j = 0; j < new_img.height; j++)
+        {
+          for (int k = 0; k < new_img.channels; k++)
+            {
+              Channel c = static_cast<Channel>(k);
+              float result = 0;
+              for (int u = -kernel_radius; u <= kernel_radius; u++)
+                {
+                  for (int v = -kernel_radius; v <= kernel_radius; v++)
+                    {
+                      int x = i + u;
+                      int y = j + v;
+                      if (x >= 0 && x < img.width && y >= 0 && y < img.height)
+                        {
+                          result += img(x, y, c)
+                            * kernel[(u + kernel_radius) * kernel_size
+                                     + (v + kernel_radius)];
+                        }
+                    }
+                }
+              new_img.set_pixel(i, j, c, static_cast<std::uint8_t>(result));
+            }
+        }
+    }
+  return new_img;
+}
+
+/// @brief Apply a Gaussian blur to an image
+/// @param img Image to apply the blur to
+/// @param sigma Standard deviation of the Gaussian kernel
+/// @return The blurred image
+Image apply_gaussian_blur(const Image& img, float sigma)
+{
+  int kernel_size = 2 * static_cast<int>(std::ceil(3 * sigma)) + 1;
+  std::vector<float> kernel(kernel_size * kernel_size);
+  float sum = 0;
+
+  // Compute the Gaussian kernel
+  for (int i = 0; i < kernel_size; i++)
+    {
+      for (int j = 0; j < kernel_size; j++)
+        {
+          int x = i - kernel_size / 2;
+          int y = j - kernel_size / 2;
+          kernel[i * kernel_size + j] =
+            std::exp(-(x * x + y * y) / (2 * sigma * sigma))
+            / (2 * M_PI * sigma * sigma);
+          sum += kernel[i * kernel_size + j];
+        }
+    }
+
+  // Normalize the kernel
+  for (int i = 0; i < kernel_size; i++)
+    {
+      for (int j = 0; j < kernel_size; j++)
+        {
+          kernel[i * kernel_size + j] /= sum;
+        }
+    }
+
+  return apply_convolution(img, kernel);
 }
