@@ -6,9 +6,9 @@
 #include "stb_image_write.h"
 
 /// @brief Construct an image with the given dimensions and number of channels.
-/// @param w - Width
-/// @param h - Height
-/// @param c - Number of channels
+/// @param w Width
+/// @param h Height
+/// @param c Number of channels
 Image::Image(int w, int h, int c)
   : width(w)
   , height(h)
@@ -17,7 +17,7 @@ Image::Image(int w, int h, int c)
 {}
 
 /// @brief Load an image from a file.
-/// @param filename - Path to the image file
+/// @param filename Path to the image file
 Image::Image(const char* filename)
 {
   int w, h, c;
@@ -38,7 +38,7 @@ Image::Image(const char* filename)
 }
 
 /// @brief Copy constructor.
-/// @param other - Image to copy
+/// @param other Image to copy
 Image::Image(const Image& other)
   : width(other.width)
   , height(other.height)
@@ -47,7 +47,7 @@ Image::Image(const Image& other)
 {}
 
 /// @brief Move constructor.
-/// @param other - Image to move
+/// @param other Image to move
 Image::Image(Image&& other)
   : width(other.width)
   , height(other.height)
@@ -56,8 +56,8 @@ Image::Image(Image&& other)
 {}
 
 /// @brief Copy assignment operator.
-/// @param other - Image to copy
-/// @return Image& - Reference to the new image
+/// @param other Image to copy
+/// @return Reference to the new image
 Image& Image::operator=(const Image& other)
 {
   if (this != &other)
@@ -75,20 +75,20 @@ Image& Image::operator=(const Image& other)
 int Image::size() const { return width * height * channels; }
 
 /// @brief Get the pixel value at a given position.
-/// @param x - x-coordinate
-/// @param y - y-coordinate
-/// @param c - channel
-/// @return std::uint8_t - Pixel channel value
+/// @param x x-coordinate
+/// @param y y-coordinate
+/// @param c channel
+/// @return Pixel channel value
 std::uint8_t Image::get_pixel(int x, int y, Channel c) const
 {
   return data[(y * width + x) * channels + c];
 }
 
 /// @brief Set the pixel value at a given position.
-/// @param x - x-coordinate
-/// @param y - y-coordinate
-/// @param c - channel
-/// @param value - Pixel channel value
+/// @param x x-coordinate
+/// @param y y-coordinate
+/// @param c channel
+/// @param value Pixel channel value
 void Image::set_pixel(int x, int y, Channel c, std::uint8_t value)
 {
   data[(y * width + x) * channels + c] = value;
@@ -96,9 +96,19 @@ void Image::set_pixel(int x, int y, Channel c, std::uint8_t value)
 
 /// @brief Save the image to a file.
 /// @param filename
-/// @return bool - True if the image was saved successfully
+/// @return True if the image was saved successfully
 bool Image::save(const char* filename) const
 {
   return stbi_write_png(filename, width, height, channels, data.data(),
                         width * channels);
+}
+
+/// @brief Indexing methods
+/// @param x x-coordinate
+/// @param y y-coordinate
+/// @param c channel
+/// @return Pixel channel value
+std::uint8_t Image::operator()(int x, int y, Channel c) const
+{
+  return get_pixel(x, y, c);
 }

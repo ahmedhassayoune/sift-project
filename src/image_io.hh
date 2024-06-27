@@ -28,4 +28,7 @@ struct Image
   std::uint8_t get_pixel(int x, int y, Channel c) const;
   void set_pixel(int x, int y, Channel c, std::uint8_t value);
   bool save(const char* filename) const;
+
+  // Indexing methods
+  std::uint8_t operator()(int x, int y, Channel c) const;
 };
