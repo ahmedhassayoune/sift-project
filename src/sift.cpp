@@ -3,6 +3,12 @@
 #include <cmath>
 #include <vector>
 
+//******************************************************
+//**                                                  **
+//**         Compute Orientation Keypoints            **
+//**                                                  **
+//******************************************************
+
 float getPixelWithClamping(const Image& image, int x, int y) {
     x = std::max(0, std::min(x, image.width - 1));
     y = std::max(0, std::min(y, image.height - 1));
@@ -179,3 +185,46 @@ void computeKeypointOrientations(const Image& image, std::vector<Keypoint>& keyp
         kp.angle = computeOrientation(grad_x, grad_y, static_cast<int>(kp.x), static_cast<int>(kp.y), radius);
     }
 }
+
+//******************************************************
+//**                                                  **
+//**              Generate Descriptors                **
+//**                                                  **
+//******************************************************
+
+
+static std::tuple<int, int, float> unpackOctave(const Keypoint& keypoint) {
+    int octave = keypoint.octave & 255;
+    int layer = (keypoint.octave >> 8) & 255;
+    if (octave >= 128) {
+        octave = octave | -128;
+    }
+    float scale = (octave >= 0) ? 1.0f / (1 << octave) : static_cast<float>(1 << -octave);
+    return {octave, layer, scale};
+}
+
+
+static void calculateGradients(const Image& gaussian_image, int window_row, int window_col, float& dx, float& dy) {
+    dx = gaussian_image.getPixel(window_col + 1, window_row) - gaussian_image.getPixel(window_col - 1, window_row);
+    dy = gaussian_image.getPixel(window_col, window_row - 1) - gaussian_image.getPixel(window_col, window_row + 1);
+}
+
+/*
+    Etapes du papier:
+        -	Décomposer l’octave, la couche et l’échelle d’un keypoint
+        -   Calculer les gradients.
+        -   Calculer les bins et les magnitudes des gradients.
+        -   Interpolation trilineaire (pour le lissage de l'histo).
+        -   Normalisation et conversion des descripteurs.
+
+*/
+
+std::vector<std::vector<float>> generateDescriptors(
+    const std::vector<Keypoint>& keypoints,
+    const ScaleSpacePyramid& gaussian_pyramid,
+    int window_width = 4,
+    int num_bins = 8,
+    float scale_multiplier = 3.0f,
+    float descriptor_max_value = 0.2f);
+
+

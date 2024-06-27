@@ -27,3 +27,11 @@ void computeKeypointOrientations(const Image& image, std::vector<Keypoint>& keyp
 
 ScaleSpacePyramid generateGaussianPyramid(const Image& image, float initial_sigma, int num_octaves, int imgs_per_octave);
 ScaleSpacePyramid generateGradientPyramid(const ScaleSpacePyramid& gaussianPyramid);
+
+std::vector<std::vector<float>> generateDescriptors(
+    const std::vector<Keypoint>& keypoints,
+    const ScaleSpacePyramid& gaussian_pyramid,
+    int window_width = 4,
+    int num_bins = 8,
+    float scale_multiplier = 3.0f,
+    float descriptor_max_value = 0.2f);
