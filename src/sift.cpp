@@ -1,4 +1,4 @@
-#include "OrientationKeypoint.hh"
+#include "sift.hh"
 #include <algorithm>
 #include <cmath>
 #include <vector>
@@ -233,11 +233,13 @@ static void computeBinsAndMagnitudes(
     magnitude *= weight;
 }
 
+
+
 /*
     Etapes du papier:
         -	Décomposer l’octave, la couche et l’échelle d’un keypoint (ok)
         -   Calculer les gradients. (ok)
-        -   Calculer les bins et les magnitudes des gradients. 
+        -   Calculer les bins et les magnitudes des gradients. (ok)
         -   Interpolation trilineaire (pour le lissage de l'histo).
         -   Normalisation et conversion des descripteurs.
 
@@ -245,10 +247,6 @@ static void computeBinsAndMagnitudes(
 
 std::vector<std::vector<float>> generateDescriptors(
     const std::vector<Keypoint>& keypoints,
-    const ScaleSpacePyramid& gaussian_pyramid,
-    int window_width = 4,
-    int num_bins = 8,
-    float scale_multiplier = 3.0f,
-    float descriptor_max_value = 0.2f);
+    const ScaleSpacePyramid& gaussian_pyramid);
 
 
