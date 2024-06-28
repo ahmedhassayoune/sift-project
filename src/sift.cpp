@@ -5,11 +5,106 @@
 
 namespace
 {
+  using Vector = std::array<float, 3>;
+  using Matrix = std::array<std::array<float, 3>, 3>;
+  using PixelCube = std::array<std::array<std::array<float, 3>, 3>, 3>;
+  using Extrema = std::tuple<int, int, int, int>;
+  using GaussianPyramid = std::vector<std::vector<Image>>;
+  using DogPyramid = GaussianPyramid;
+
+  /// @brief Get the pixel cube for a given pixel in the DoG images as (z, x, y)
+  /// @param dog_images DoG images
+  /// @param x x-coordinate
+  /// @param y y-coordinate
+  /// @param z scale-coordinate
+  /// @return The pixel cube
+  PixelCube
+  get_pixel_cube(const std::vector<Image>& dog_images, int x, int y, int z)
+  {
+    PixelCube pixel_cube;
+    for (int dz = -1; dz <= 1; ++dz)
+      {
+        for (int dx = -1; dx <= 1; ++dx)
+          {
+            for (int dy = -1; dy <= 1; ++dy)
+              {
+                pixel_cube[dz + 1][dx + 1][dy + 1] =
+                  dog_images[z + dz].get_pixel(x + dx, y + dy, GRAY) / 255.0f;
+              }
+          }
+      }
+    return pixel_cube;
+  }
+
+  /// @brief Compute the gradient of a pixel cube
+  /// @param pixel_cube The pixel cube
+  /// @return The gradient as (dz, dx, dy)
+  Vector compute_gradient(const PixelCube& pixel_cube)
+  {
+    Vector gradient;
+    gradient[0] = 0.5 * (pixel_cube[2][1][1] - pixel_cube[0][1][1]); // dz
+    gradient[1] = 0.5 * (pixel_cube[1][2][1] - pixel_cube[1][0][1]); // dx
+    gradient[2] = 0.5 * (pixel_cube[1][1][2] - pixel_cube[1][1][0]); // dy
+    return gradient;
+  }
+
+  /// @brief Compute the Hessian matrix of a pixel cube
+  /// @param pixel_cube The pixel cube
+  /// @return The Hessian matrix
+  Matrix compute_hessian(const PixelCube& pixel_cube)
+  {
+    Matrix hessian;
+    hessian[0][0] =
+      pixel_cube[0][1][1] - 2 * pixel_cube[1][1][1] + pixel_cube[2][1][1];
+    hessian[1][1] =
+      pixel_cube[1][0][1] - 2 * pixel_cube[1][1][1] + pixel_cube[1][2][1];
+    hessian[2][2] =
+      pixel_cube[1][1][0] - 2 * pixel_cube[1][1][1] + pixel_cube[1][1][2];
+
+    hessian[0][1] = hessian[1][0] = 0.25
+      * (pixel_cube[2][2][1] - pixel_cube[2][0][1] - pixel_cube[0][2][1]
+         + pixel_cube[0][0][1]);
+    hessian[0][2] = hessian[2][0] = 0.25
+      * (pixel_cube[2][1][2] - pixel_cube[2][1][0] - pixel_cube[0][1][2]
+         + pixel_cube[0][1][0]);
+    hessian[1][2] = hessian[2][1] = 0.25
+      * (pixel_cube[1][0][0] - pixel_cube[1][2][0] - pixel_cube[1][0][2]
+         + pixel_cube[1][2][2]);
+
+    return hessian;
+  }
+
+  /// @brief Fit a quadratic function to the gradient and Hessian matrix
+  /// @param g Gradient
+  /// @param h Hessian matrix
+  /// @return The offset as (dz, dx, dy)
+  Vector fit_quadratic(const Vector& g, const Matrix& h)
+  {
+    Matrix hinv;
+    float det = h[0][0] * h[1][1] * h[2][2] + 2 * (h[0][1] * h[1][2] * h[2][0])
+      - h[0][2] * h[1][1] * h[2][0] - h[0][0] * h[1][2] * h[2][1]
+      - h[0][1] * h[1][0] * h[2][2];
+
+    hinv[0][0] = (h[1][1] * h[2][2] - h[1][2] * h[2][1]) / det;
+    hinv[0][1] = (h[0][2] * h[2][1] - h[0][1] * h[2][2]) / det;
+    hinv[0][2] = (h[0][1] * h[1][2] - h[0][2] * h[1][1]) / det;
+    hinv[1][1] = (h[0][0] * h[2][2] - h[0][2] * h[2][0]) / det;
+    hinv[1][2] = (h[0][2] * h[1][0] - h[0][0] * h[1][2]) / det;
+    hinv[2][2] = (h[0][0] * h[1][1] - h[0][1] * h[1][0]) / det;
+
+    Vector offset;
+    offset[0] = -hinv[0][0] * g[0] - hinv[0][1] * g[1] - hinv[0][2] * g[2];
+    offset[1] = -hinv[0][1] * g[0] - hinv[1][1] * g[1] - hinv[1][2] * g[2];
+    offset[2] = -hinv[0][2] * g[0] - hinv[1][2] * g[1] - hinv[2][2] * g[2];
+
+    return offset;
+  }
+
   /// @brief Compute the initial image for the SIFT algorithm
   /// @param img Input image
-  /// @param sigma The initial sigma value (Defaults to 1.6)
+  /// @param sigma The initial sigma value
   /// @return The initial image
-  Image compute_initial_image(const Image& img, float sigma = 1.6f)
+  Image compute_initial_image(const Image& img, float sigma)
   {
     Image gray_img = convert_to_grayscale(img);
     Image initial_img = resize_inter_bilinear(gray_img, 2, 2);
@@ -108,11 +203,11 @@ namespace
   /// @param intervals Number of intervals
   /// @return The difference of Gaussian images for each octave
   std::vector<std::vector<Image>>
-  compute_dog_images(const std::vector<std::vector<Image>>& gaussian_images,
+  compute_dog_images(const GaussianPyramid& gaussian_images,
                      int octaves_count,
                      int intervals)
   {
-    std::vector<std::vector<Image>> dog_images(octaves_count);
+    DogPyramid dog_images(octaves_count);
     int dog_gaussians_count = intervals + 2;
 
     for (int octave = 0; octave < octaves_count; ++octave)
@@ -130,15 +225,15 @@ namespace
     return dog_images;
   }
 
-  using Extrema = std::tuple<int, int, int>;
-
   /// @brief Detect extrema in an octave of DoG images
   /// @param octave_dog_images DoG images for an octave
+  /// @param octave The octave index
   /// @param window_size Size of the 3D window to search for extrema
   /// @param threshold Threshold value for detecting extrema
   /// @return The extrema points
   std::vector<Extrema>
   detect_octave_extrema(const std::vector<Image>& octave_dog_images,
+                        const int octave,
                         const int window_size,
                         const int threshold)
   {
@@ -186,7 +281,7 @@ namespace
                   }
                 if (is_extremum)
                   {
-                    extrema.push_back({x, y, z});
+                    extrema.push_back({x, y, z, octave});
                   }
               }
           }
@@ -203,11 +298,11 @@ namespace
   /// @param contrast_threshold Threshold value for detecting extrema (Defaults to 0.04f)
   /// @return The extrema points
   std::vector<Extrema>
-  detect_extrema(const std::vector<std::vector<Image>>& dog_images,
+  detect_extrema(const DogPyramid& dog_images,
                  const std::vector<float>& gaussian_kernels,
                  const int intervals,
-                 const int window_size = 3,
-                 const float contrast_threshold = 0.04f)
+                 const int window_size,
+                 const float contrast_threshold)
   {
     std::vector<Extrema> total_extrema;
     const int threshold =
@@ -217,8 +312,8 @@ namespace
     for (int octave = 0; octave < octaves; ++octave)
       {
         std::vector<Image> octave_dog_images = dog_images[octave];
-        std::vector<Extrema> extrema =
-          detect_octave_extrema(octave_dog_images, window_size, threshold);
+        std::vector<Extrema> extrema = detect_octave_extrema(
+          octave_dog_images, octave, window_size, threshold);
         total_extrema.insert(total_extrema.end(), extrema.begin(),
                              extrema.end());
       }
@@ -226,15 +321,124 @@ namespace
     return total_extrema;
   }
 
+  /// @brief Compute and filter the keypoints from the detected extrema
+  /// @param dog_images DoG images for each octave
+  /// @param extrema Detected extrema points
+  /// @param gaussian_kernels The successive Gaussian kernels
+  /// @param window_size Size of the 3D window to search for extrema
+  /// @param intervals Number of intervals
+  /// @param contrast_threshold Threshold value for detecting extrema
+  /// @param eigen_ratio Eigen ratio threshold for edge detection
+  /// @return The keypoints
+  std::vector<Keypoint>
+  compute_keypoints(const DogPyramid& dog_images,
+                    const std::vector<Extrema>& extrema,
+                    const std::vector<float>& gaussian_kernels,
+                    const int window_size,
+                    const int intervals,
+                    const float contrast_threshold,
+                    const float eigen_ratio)
+  {
+    std::vector<Keypoint> keypoints;
+    const int width = dog_images[0][0].width;
+    const int height = dog_images[0][0].height;
+    const int depth = dog_images[0].size();
+
+    for (const Extrema& e : extrema)
+      {
+        auto [x, y, scale, octave] = e;
+
+        auto dog_octave = dog_images[octave];
+        int step;
+        for (step = 0; step < MAX_CONVERGENCE_STEPS; ++step)
+          {
+            PixelCube pixel_cube = get_pixel_cube(dog_octave, x, y, octave);
+            Vector gradient = compute_gradient(pixel_cube);
+            Matrix hessian = compute_hessian(pixel_cube);
+            Vector offset = fit_quadratic(gradient, hessian);
+
+            float max_offset =
+              std::max(std::abs(offset[0]),
+                       std::max(std::abs(offset[1]), std::abs(offset[2])));
+
+            scale += std::round(offset[0]);
+            x += std::round(offset[1]);
+            y += std::round(offset[2]);
+
+            if (max_offset < CONVERGENCE_THRESHOLD) // Converged
+              {
+                // Step 1: Check contrast threshold of new extremum value
+                float dot_gradient_offset = gradient[0] * offset[0]
+                  + gradient[1] * offset[1] + gradient[2] * offset[2];
+
+                bool valid_contrast =
+                  (std::abs(pixel_cube[1][1][1] + 0.5 * dot_gradient_offset)
+                   * intervals)
+                  > contrast_threshold;
+
+                if (!valid_contrast)
+                  {
+                    step = MAX_CONVERGENCE_STEPS;
+                    break;
+                  }
+
+                // Step 2: Check if the extremum is not on the edge
+                float xy_hessian_trace = hessian[0][0] + hessian[1][1];
+                float xy_hessian_det =
+                  hessian[0][0] * hessian[1][1] - hessian[0][1] * hessian[1][0];
+
+                bool valid_edge = (std::pow(xy_hessian_trace, 2) * eigen_ratio)
+                  < (std::pow(eigen_ratio + 1, 2) * xy_hessian_det);
+
+                if (xy_hessian_det <= 0 || !valid_edge)
+                  {
+                    step = MAX_CONVERGENCE_STEPS;
+                  }
+
+                break;
+              }
+
+            if (x < window_size || x >= (width - window_size) || y < window_size
+                || y >= (height - window_size) || scale < window_size
+                || scale >= (depth - window_size))
+              {
+                step = MAX_CONVERGENCE_STEPS;
+                break;
+              }
+          }
+
+        // If no convergence or out of bounds or invalid contrast, skip this keypoint
+        if (step >= MAX_CONVERGENCE_STEPS)
+          {
+            continue;
+          }
+
+        Keypoint kp;
+        kp.x = std::pow(2, octave) * x; // Scale back x to initial image size
+        kp.y = std::pow(2, octave) * y; // Scale back y to initial image size
+        kp.scale = gaussian_kernels[scale];
+        kp.octave = octave;
+        kp.porientation = 0.0f;
+        keypoints.push_back(kp);
+      }
+    return keypoints;
+  }
 } // anonymous namespace
 
 /// @brief Detect stable keypoints in an image based on the SIFT algorithm
 /// @param img Input image
 /// @param init_sigma Initial sigma value (Defaults to 1.6)
 /// @param intervals Number of intervals (Defaults to 3)
+/// @param window_size Size of the 3D window to search for extrema (Defaults to 3)
+/// @param contrast_threshold Threshold value for detecting extrema (Defaults to 0.04f)
+/// @param eigen_ratio Eigen ratio threshold for edge detection (Defaults to 10.0f)
 /// @return The stable keypoints
-std::vector<Keypoint>
-detect_keypoints(const Image& img, float init_sigma, int intervals)
+std::vector<Keypoint> detect_keypoints(const Image& img,
+                                       const float init_sigma,
+                                       const int intervals,
+                                       const int window_size,
+                                       const float contrast_threshold,
+                                       const float eigen_ratio)
 {
   std::cout << "Detecting keypoints..." << std::endl;
 
@@ -261,12 +465,14 @@ detect_keypoints(const Image& img, float init_sigma, int intervals)
     compute_dog_images(gaussian_images, octaves_count, intervals);
   std::cout << "DoG images computed" << std::endl;
 
-  auto extrema = detect_extrema(dog_images, gaussian_kernels, intervals);
+  auto extrema = detect_extrema(dog_images, gaussian_kernels, intervals,
+                                window_size, contrast_threshold);
   std::cout << "Extrema points detected" << std::endl;
 
-  return std::vector<Keypoint>();
+  auto keypoints =
+    compute_keypoints(dog_images, extrema, gaussian_kernels, window_size,
+                      intervals, contrast_threshold, eigen_ratio);
+  std::cout << "Keypoints computed" << std::endl;
 
-  //   std::vector<Keypoint> keypoints =
-  //     find_keypoints(dog_images, octaves_count, intervals);
-  // TODO: filter out unstable keypoints
+  return keypoints;
 }
