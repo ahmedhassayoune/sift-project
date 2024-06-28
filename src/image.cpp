@@ -37,9 +37,9 @@ Image subtract(const Image& img1, const Image& img2)
             {
               Channel c = static_cast<Channel>(k);
 
-              std::uint8_t p1 = img1(i, j, c);
-              std::uint8_t p2 = img2(i, j, c);
-              std::uint8_t value = (p1 > p2) ? p1 - p2 : 0;
+              int p1 = img1(i, j, c);
+              int p2 = img2(i, j, c);
+              std::uint8_t value = std::abs(p1 - p2);
               new_img.set_pixel(i, j, c, value);
             }
         }
