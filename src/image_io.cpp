@@ -85,15 +85,15 @@ Image& Image::operator=(const Image& other)
 }
 
 /// @brief Get the size of the image in bytes.
-/// @return int
-int Image::size() const { return width * height * channels; }
+/// @return Image size in bytes
+size_t Image::size() const { return width * height * channels * sizeof(int); }
 
 /// @brief Get the pixel value at a given position.
 /// @param x x-coordinate
 /// @param y y-coordinate
 /// @param c channel
 /// @return Pixel channel value
-std::uint8_t Image::get_pixel(int x, int y, Channel c) const
+int Image::get_pixel(int x, int y, Channel c) const
 {
   return data[(y * width + x) * channels + c];
 }
@@ -103,26 +103,46 @@ std::uint8_t Image::get_pixel(int x, int y, Channel c) const
 /// @param y y-coordinate
 /// @param c channel
 /// @param value Pixel channel value
-void Image::set_pixel(int x, int y, Channel c, std::uint8_t value)
+void Image::set_pixel(int x, int y, Channel c, int value)
 {
   data[(y * width + x) * channels + c] = value;
 }
 
 /// @brief Save the image to PNG format.
 /// @param filename Path to the image file
+/// @param format Image format
 /// @return True if the image was saved successfully
-bool Image::save(const char* filename) const
+bool Image::save(const char* filename, const ImageFormat format) const
 {
-  return stbi_write_png(filename, width, height, channels, data.data(),
-                        width * channels);
+  // Convert the data to 8-bit
+  std::vector<uint8_t> data8(width * height * channels);
+  for (int i = 0; i < width * height * channels; ++i)
+    data8[i] = static_cast<uint8_t>(this->data[i]);
+
+  switch (format)
+    {
+    case PNG:
+      return stbi_write_png(filename, width, height, channels, data8.data(),
+                            width * channels);
+    case BMP:
+      return stbi_write_bmp(filename, width, height, channels, data8.data());
+    case TGA:
+      return stbi_write_tga(filename, width, height, channels, data8.data());
+    case JPG:
+      return stbi_write_jpg(filename, width, height, channels, data8.data(),
+                            100);
+    default:
+      return false;
+    }
 }
 
 /// @brief Save the image to PNG format.
 /// @param filename Path to the image file
+/// @param format Image format
 /// @return True if the image was saved successfully
-bool Image::save(const std::string filename) const
+bool Image::save(const std::string filename, const ImageFormat format) const
 {
-  return save(filename.c_str());
+  return save(filename.c_str(), format);
 }
 
 /// @brief Indexing methods
@@ -130,7 +150,7 @@ bool Image::save(const std::string filename) const
 /// @param y y-coordinate
 /// @param c channel
 /// @return Pixel channel value
-std::uint8_t Image::operator()(int x, int y, Channel c) const
+int Image::operator()(int x, int y, Channel c) const
 {
   return get_pixel(x, y, c);
 }

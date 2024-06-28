@@ -155,8 +155,8 @@ namespace
             for (int z = window_size; z < depth - window_size; ++z)
               {
                 bool is_extremum = true;
-                std::uint8_t pixel = octave_dog_images[z].get_pixel(x, y, GRAY);
-                if (pixel <= threshold)
+                int pixel = octave_dog_images[z].get_pixel(x, y, GRAY);
+                if (std::abs(pixel) <= threshold)
                   {
                     continue;
                   }
@@ -174,10 +174,9 @@ namespace
                                 continue;
                               }
 
-                            std::uint8_t dpixel =
-                              octave_dog_images[z + dz].get_pixel(x + dx,
-                                                                  y + dy, GRAY);
-                            if (pixel < dpixel)
+                            int dpixel = octave_dog_images[z + dz].get_pixel(
+                              x + dx, y + dy, GRAY);
+                            if (std::abs(pixel) < std::abs(dpixel))
                               {
                                 is_extremum = false;
                                 break;

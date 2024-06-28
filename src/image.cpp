@@ -12,10 +12,10 @@ Image convert_to_grayscale(const Image& img)
     {
       for (int j = 0; j < new_img.height; j++)
         {
-          std::uint8_t r = img(i, j, RED);
-          std::uint8_t g = img(i, j, GREEN);
-          std::uint8_t b = img(i, j, BLUE);
-          std::uint8_t value = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+          float r = img(i, j, RED);
+          float g = img(i, j, GREEN);
+          float b = img(i, j, BLUE);
+          int value = 0.2126 * r + 0.7152 * g + 0.0722 * b;
           new_img.set_pixel(i, j, GRAY, value);
         }
     }
@@ -39,8 +39,7 @@ Image subtract(const Image& img1, const Image& img2)
 
               int p1 = img1(i, j, c);
               int p2 = img2(i, j, c);
-              std::uint8_t value = std::abs(p1 - p2);
-              new_img.set_pixel(i, j, c, value);
+              new_img.set_pixel(i, j, c, p1 - p2);
             }
         }
     }
@@ -140,7 +139,7 @@ Image apply_convolution(const Image& img, const std::vector<float>& kernel)
                         }
                     }
                 }
-              new_img.set_pixel(i, j, c, static_cast<std::uint8_t>(result));
+              new_img.set_pixel(i, j, c, result);
             }
         }
     }

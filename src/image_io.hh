@@ -12,12 +12,20 @@ enum Channel
   BLUE = 2
 };
 
+enum ImageFormat
+{
+  PNG,
+  BMP,
+  TGA,
+  JPG
+};
+
 struct Image
 {
   int width;
   int height;
   int channels;
-  std::vector<std::uint8_t> data;
+  std::vector<int> data;
 
   Image();
   Image(int w, int h, int c);
@@ -26,13 +34,13 @@ struct Image
   Image(const Image& other);
   Image(Image&& other);
   Image& operator=(const Image& other);
-  int size() const;
+  size_t size() const;
 
-  std::uint8_t get_pixel(int x, int y, Channel c) const;
-  void set_pixel(int x, int y, Channel c, std::uint8_t value);
-  bool save(const char* filename) const;
-  bool save(const std::string filename) const;
+  int get_pixel(int x, int y, Channel c) const;
+  void set_pixel(int x, int y, Channel c, int value);
+  bool save(const char* filename, const ImageFormat format = PNG) const;
+  bool save(const std::string filename, const ImageFormat format = PNG) const;
 
   // Indexing methods
-  std::uint8_t operator()(int x, int y, Channel c) const;
+  int operator()(int x, int y, Channel c) const;
 };
