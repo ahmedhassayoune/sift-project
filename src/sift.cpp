@@ -242,12 +242,13 @@ namespace
     const int width = octave_dog_images[0].width;
     const int height = octave_dog_images[0].height;
     const int depth = octave_dog_images.size();
+    const int border = window_size / 2;
 
-    for (int x = window_size; x < width - window_size; ++x)
+    for (int x = border; x < width - border; ++x)
       {
-        for (int y = window_size; y < height - window_size; ++y)
+        for (int y = border; y < height - border; ++y)
           {
-            for (int z = window_size; z < depth - window_size; ++z)
+            for (int z = border; z < depth - border; ++z)
               {
                 bool is_extremum = true;
                 int pixel = octave_dog_images[z].get_pixel(x, y, GRAY);
@@ -256,13 +257,11 @@ namespace
                     continue;
                   }
 
-                for (int dx = -window_size; (dx <= window_size) && is_extremum;
-                     ++dx)
+                for (int dx = -border; (dx <= border) && is_extremum; ++dx)
                   {
-                    for (int dy = -window_size;
-                         (dy <= window_size) && is_extremum; ++dy)
+                    for (int dy = -border; (dy <= border) && is_extremum; ++dy)
                       {
-                        for (int dz = -window_size; dz <= window_size; ++dz)
+                        for (int dz = -border; dz <= border; ++dz)
                           {
                             if (dx == 0 && dy == 0 && dz == 0)
                               {
@@ -271,7 +270,7 @@ namespace
 
                             int dpixel = octave_dog_images[z + dz].get_pixel(
                               x + dx, y + dy, GRAY);
-                            if (std::abs(pixel) < std::abs(dpixel))
+                            if (std::abs(pixel) <= std::abs(dpixel))
                               {
                                 is_extremum = false;
                                 break;
@@ -306,7 +305,7 @@ namespace
   {
     std::vector<Extrema> total_extrema;
     const int threshold =
-      std::floor(0.5 * contrast_threshold / intervals * 255);
+      std::floor(255 * 0.5 * contrast_threshold / intervals);
 
     int octaves = dog_images.size();
     for (int octave = 0; octave < octaves; ++octave)
@@ -343,16 +342,23 @@ namespace
     const int width = dog_images[0][0].width;
     const int height = dog_images[0][0].height;
     const int depth = dog_images[0].size();
+    const int border = window_size / 2;
 
+    int count = 0;
     for (const Extrema& e : extrema)
       {
+        if (count % 100 == 0)
+          {
+            std::cout << "Computed " << count << "/" << extrema.size()
+                      << "keypoints..." << std::endl;
+          }
         auto [x, y, scale, octave] = e;
 
         auto dog_octave = dog_images[octave];
         int step;
         for (step = 0; step < MAX_CONVERGENCE_STEPS; ++step)
           {
-            PixelCube pixel_cube = get_pixel_cube(dog_octave, x, y, octave);
+            PixelCube pixel_cube = get_pixel_cube(dog_octave, x, y, scale);
             Vector gradient = compute_gradient(pixel_cube);
             Matrix hessian = compute_hessian(pixel_cube);
             Vector offset = fit_quadratic(gradient, hessian);
@@ -374,7 +380,7 @@ namespace
                 bool valid_contrast =
                   (std::abs(pixel_cube[1][1][1] + 0.5 * dot_gradient_offset)
                    * intervals)
-                  > contrast_threshold;
+                  >= contrast_threshold;
 
                 if (!valid_contrast)
                   {
@@ -398,9 +404,9 @@ namespace
                 break;
               }
 
-            if (x < window_size || x >= (width - window_size) || y < window_size
-                || y >= (height - window_size) || scale < window_size
-                || scale >= (depth - window_size))
+            if (x < border || x >= (width - border) || y < border
+                || y >= (height - border) || scale < border
+                || scale >= (depth - border))
               {
                 step = MAX_CONVERGENCE_STEPS;
                 break;
@@ -410,6 +416,7 @@ namespace
         // If no convergence or out of bounds or invalid contrast, skip this keypoint
         if (step >= MAX_CONVERGENCE_STEPS)
           {
+            count++;
             continue;
           }
 
@@ -420,6 +427,7 @@ namespace
         kp.octave = octave;
         kp.porientation = 0.0f;
         keypoints.push_back(kp);
+        count++;
       }
     return keypoints;
   }
@@ -442,7 +450,7 @@ std::vector<Keypoint> detect_keypoints(const Image& img,
 {
   std::cout << "Detecting keypoints..." << std::endl;
 
-  const Image initial_image = compute_initial_image(img, init_sigma);
+  Image initial_image = compute_initial_image(img, init_sigma);
   std::cout << "Initial image computed" << std::endl;
 
   int octaves_count =
@@ -467,12 +475,26 @@ std::vector<Keypoint> detect_keypoints(const Image& img,
 
   auto extrema = detect_extrema(dog_images, gaussian_kernels, intervals,
                                 window_size, contrast_threshold);
-  std::cout << "Extrema points detected" << std::endl;
+  std::cout << "Extrema points detected: " << extrema.size() << std::endl;
 
   auto keypoints =
     compute_keypoints(dog_images, extrema, gaussian_kernels, window_size,
                       intervals, contrast_threshold, eigen_ratio);
-  std::cout << "Keypoints computed" << std::endl;
+  std::cout << "Keypoints computed: " << keypoints.size() << std::endl;
+
+  std::cout << "Drawing keypoints..." << std::endl;
+  draw_keypoints(initial_image, keypoints, 7);
+  initial_image.save("keypoints.png");
 
   return keypoints;
+}
+
+void draw_keypoints(Image& img,
+                    const std::vector<Keypoint>& keypoints,
+                    int size)
+{
+  for (const Keypoint& kp : keypoints)
+    {
+      img.draw_point(kp.x, kp.y, size);
+    }
 }

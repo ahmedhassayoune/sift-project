@@ -43,4 +43,7 @@ struct Image
 
   // Indexing methods
   int operator()(int x, int y, Channel c) const;
+
+  // Drawing methods
+  void draw_point(int x, int y, int size = 5);
 };

@@ -86,7 +86,7 @@ Image& Image::operator=(const Image& other)
 
 /// @brief Get the size of the image in bytes.
 /// @return Image size in bytes
-size_t Image::size() const { return width * height * channels * sizeof(int); }
+size_t Image::size() const { return width * height * channels; }
 
 /// @brief Get the pixel value at a given position.
 /// @param x x-coordinate
@@ -115,9 +115,14 @@ void Image::set_pixel(int x, int y, Channel c, int value)
 bool Image::save(const char* filename, const ImageFormat format) const
 {
   // Convert the data to 8-bit
-  std::vector<uint8_t> data8(width * height * channels);
-  for (int i = 0; i < width * height * channels; ++i)
-    data8[i] = static_cast<uint8_t>(this->data[i]);
+  std::vector<uint8_t> data8(this->size());
+  for (size_t i = 0; i < this->size(); ++i)
+    {
+      // Clamp the pixel values to [0, 255]
+      uint8_t result =
+        static_cast<uint8_t>(std::max(0, std::min(255, this->data[i])));
+      data8[i] = result;
+    }
 
   switch (format)
     {

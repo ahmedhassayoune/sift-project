@@ -20,3 +20,7 @@ std::vector<Keypoint> detect_keypoints(const Image& img,
                                        const int window_size = 3,
                                        const float contrast_threshold = 0.04f,
                                        const float eigen_ratio = 10.0f);
+
+void draw_keypoints(Image& img,
+                    const std::vector<Keypoint>& keypoints,
+                    int size = 5);

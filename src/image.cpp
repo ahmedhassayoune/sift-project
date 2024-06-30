@@ -29,19 +29,9 @@ Image convert_to_grayscale(const Image& img)
 Image subtract(const Image& img1, const Image& img2)
 {
   Image new_img(img1.width, img1.height, img1.channels);
-  for (int i = 0; i < new_img.width; i++)
+  for (size_t i = 0; i < new_img.size(); i++)
     {
-      for (int j = 0; j < new_img.height; j++)
-        {
-          for (int k = 0; k < new_img.channels; k++)
-            {
-              Channel c = static_cast<Channel>(k);
-
-              int p1 = img1(i, j, c);
-              int p2 = img2(i, j, c);
-              new_img.set_pixel(i, j, c, p1 - p2);
-            }
-        }
+      new_img.data[i] = img1.data[i] - img2.data[i];
     }
   return new_img;
 }
@@ -180,4 +170,37 @@ Image apply_gaussian_blur(const Image& img, float sigma)
     }
 
   return apply_convolution(img, kernel);
+}
+
+void Image::draw_point(int x, int y, int size)
+{
+  for (int i = x - size / 2; i < x + size / 2; i++)
+    {
+      for (int j = y - size / 2; j < y + size / 2; j++)
+        {
+          if (i < 0 || i >= width || j < 0 || j >= height)
+            {
+              continue;
+            }
+
+          if (channels == 1)
+            {
+              set_pixel(i, j, GRAY, 255);
+              continue;
+            }
+
+          if (i == x && j == y)
+            {
+              set_pixel(i, j, RED, 255);
+              set_pixel(i, j, GREEN, 0);
+              set_pixel(i, j, BLUE, 0);
+            }
+          else
+            {
+              set_pixel(i, j, RED, 255);
+              set_pixel(i, j, GREEN, 165);
+              set_pixel(i, j, BLUE, 0);
+            }
+        }
+    }
 }
