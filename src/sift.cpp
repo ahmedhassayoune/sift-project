@@ -389,9 +389,9 @@ namespace
                   }
 
                 // Step 2: Check if the extremum is not on the edge
-                float xy_hessian_trace = hessian[0][0] + hessian[1][1];
+                float xy_hessian_trace = hessian[1][1] + hessian[2][2];
                 float xy_hessian_det =
-                  hessian[0][0] * hessian[1][1] - hessian[0][1] * hessian[1][0];
+                  hessian[1][1] * hessian[2][2] - hessian[1][2] * hessian[2][1];
 
                 bool valid_edge = (std::pow(xy_hessian_trace, 2) * eigen_ratio)
                   < (std::pow(eigen_ratio + 1, 2) * xy_hessian_det);
