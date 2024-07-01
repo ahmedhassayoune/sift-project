@@ -233,14 +233,82 @@ static void computeBinsAndMagnitudes(
     magnitude *= weight;
 }
 
+static void trilinearInterpolation(
+    const std::vector<float>& row_bin_list,
+    const std::vector<float>& col_bin_list,
+    const std::vector<float>& magnitude_list,
+    const std::vector<float>& orientation_bin_list,
+    std::vector<std::vector<std::vector<float>>>& histogram_tensor,
+    int num_bins) {
 
+    for (size_t i = 0; i < row_bin_list.size(); ++i) {
+        int row_bin_floor = static_cast<int>(std::floor(row_bin_list[i]));
+        int col_bin_floor = static_cast<int>(std::floor(col_bin_list[i]));
+        int orientation_bin_floor = static_cast<int>(std::floor(orientation_bin_list[i]));
+        float row_fraction = row_bin_list[i] - row_bin_floor;
+        float col_fraction = col_bin_list[i] - col_bin_floor;
+        float orientation_fraction = orientation_bin_list[i] - orientation_bin_floor;
+
+        if (orientation_bin_floor < 0) orientation_bin_floor += num_bins;
+        if (orientation_bin_floor >= num_bins) orientation_bin_floor -= num_bins;
+
+        float c1 = magnitude_list[i] * row_fraction;
+        float c0 = magnitude_list[i] * (1 - row_fraction);
+        float c11 = c1 * col_fraction;
+        float c10 = c1 * (1 - col_fraction);
+        float c01 = c0 * col_fraction;
+        float c00 = c0 * (1 - col_fraction);
+        float c111 = c11 * orientation_fraction;
+        float c110 = c11 * (1 - orientation_fraction);
+        float c101 = c10 * orientation_fraction;
+        float c100 = c10 * (1 - orientation_fraction);
+        float c011 = c01 * orientation_fraction;
+        float c010 = c01 * (1 - orientation_fraction);
+        float c001 = c00 * orientation_fraction;
+        float c000 = c00 * (1 - orientation_fraction);
+
+        histogram_tensor[row_bin_floor + 1][col_bin_floor + 1][orientation_bin_floor] += c000;
+        histogram_tensor[row_bin_floor + 1][col_bin_floor + 1][(orientation_bin_floor + 1) % num_bins] += c001;
+        histogram_tensor[row_bin_floor + 1][col_bin_floor + 2][orientation_bin_floor] += c010;
+        histogram_tensor[row_bin_floor + 1][col_bin_floor + 2][(orientation_bin_floor + 1) % num_bins] += c011;
+        histogram_tensor[row_bin_floor + 2][col_bin_floor + 1][orientation_bin_floor] += c100;
+        histogram_tensor[row_bin_floor + 2][col_bin_floor + 1][(orientation_bin_floor + 1) % num_bins] += c101;
+        histogram_tensor[row_bin_floor + 2][col_bin_floor + 2][orientation_bin_floor] += c110;
+        histogram_tensor[row_bin_floor + 2][col_bin_floor + 2][(orientation_bin_floor + 1) % num_bins] += c111;
+    }
+}
+
+static std::vector<float> normalizeAndConvertDescriptor(std::vector<std::vector<std::vector<float>>>& histogram_tensor, int window_width, int num_bins, float descriptor_max_value) {
+    std::vector<float> descriptor_vector;
+    for (int i = 1; i < window_width + 1; ++i) {
+        for (int j = 1; j < window_width + 1; ++j) {
+            for (int k = 0; k < num_bins; ++k) {
+                descriptor_vector.push_back(histogram_tensor[i][j][k]);
+            }
+        }
+    }
+
+    float norm = std::sqrt(std::inner_product(descriptor_vector.begin(), descriptor_vector.end(), descriptor_vector.begin(), 0.0f));
+    if (norm > 0) {
+        for (float& value : descriptor_vector) {
+            value = std::min(value / norm, descriptor_max_value);
+        }
+    }
+
+    norm = std::sqrt(std::inner_product(descriptor_vector.begin(), descriptor_vector.end(), descriptor_vector.begin(), 0.0f));
+    for (float& value : descriptor_vector) {
+        value /= norm;
+    }
+
+    return descriptor_vector;
+}
 
 /*
     Etapes du papier:
         -	Décomposer l’octave, la couche et l’échelle d’un keypoint (ok)
         -   Calculer les gradients. (ok)
         -   Calculer les bins et les magnitudes des gradients. (ok)
-        -   Interpolation trilineaire (pour le lissage de l'histo).
+        -   Interpolation trilineaire (pour le lissage de l'histo). (ok)
         -   Normalisation et conversion des descripteurs.
 
 */
