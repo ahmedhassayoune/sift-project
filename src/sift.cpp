@@ -12,7 +12,7 @@
 float getPixelWithClamping(const Image& image, int x, int y) {
     x = std::max(0, std::min(x, image.width - 1));
     y = std::max(0, std::min(y, image.height - 1));
-    return image.getPixel(x, y);
+    return image.get_pixel(x, y, RED);
 }
 
 void computeGradients(const Image& image, Image& grad_x, Image& grad_y) {
@@ -50,9 +50,9 @@ Image applyGaussianBlur(const Image& image, float sigma) {
             float value = 0.0f;
             for (int k = -half_size; k <= half_size; ++k) {
                 int clamped_x = std::max(0, std::min(x + k, image.width - 1));
-                value += kernel[k + half_size] * image.getPixel(clamped_x, y);
+                value += kernel[k + half_size] * image.get_pixel(clamped_x, y);
             }
-            blurred_image.setPixel(x, y, value);
+            blurred_image.set_pixel(x, y, value);
         }
     }
 
@@ -62,9 +62,9 @@ Image applyGaussianBlur(const Image& image, float sigma) {
             float value = 0.0f;
             for (int k = -half_size; k <= half_size; ++k) {
                 int clamped_y = std::max(0, std::min(y + k, image.height - 1));
-                value += kernel[k + half_size] * blurred_image.getPixel(x, clamped_y);
+                value += kernel[k + half_size] * blurred_image.get_pixel(x, clamped_y);
             }
-            blurred_image.setPixel(x, y, value);
+            blurred_image.set_pixel(x, y, value);
         }
     }
 
@@ -85,7 +85,7 @@ ScaleSpacePyramid generateGaussianPyramid(const Image& image, float initial_sigm
                 Image downsampled = {image.width / 2, image.height / 2, std::vector<float>((image.width / 2) * (image.height / 2))};
                 for (int y = 0; y < downsampled.height; ++y) {
                     for (int x = 0; x < downsampled.width; ++x) {
-                        downsampled.setPixel(x, y, pyramid.octaves[octave - 1][imgs_per_octave - 1].getPixel(x * 2, y * 2));
+                        downsampled.set_pixel(x, y, pyramid.octaves[octave - 1][imgs_per_octave - 1].getPixel(x * 2, y * 2));
                     }
                 }
                 pyramid.octaves[octave][scale] = applyGaussianBlur(downsampled, sigma);
@@ -315,6 +315,59 @@ static std::vector<float> normalizeAndConvertDescriptor(std::vector<std::vector<
 
 std::vector<std::vector<float>> generateDescriptors(
     const std::vector<Keypoint>& keypoints,
-    const ScaleSpacePyramid& gaussian_pyramid);
+    const ScaleSpacePyramid& gaussian_pyramid,
+    int window_width = 4,
+    int num_bins = 8,
+    float scale_multiplier = 3.0f,
+    float descriptor_max_value = 0.2f) {
 
+    std::vector<std::vector<float>> descriptors;
 
+    for (const auto& keypoint : keypoints) {
+        auto [octave, layer, scale] = unpackOctave(keypoint);
+        const Image& gaussian_image = gaussian_pyramid.octaves[octave + 1][layer];
+        int num_rows = gaussian_image.height;
+        int num_cols = gaussian_image.width;
+        std::vector<int> point = {static_cast<int>(std::round(scale * keypoint.x)), static_cast<int>(std::round(scale * keypoint.y))};
+
+        float bins_per_degree = num_bins / 360.0f;
+        float angle = 360.0f - keypoint.angle;
+        float cos_angle = std::cos(angle * M_PI / 180.0f);
+        float sin_angle = std::sin(angle * M_PI / 180.0f);
+        float weight_multiplier = -0.5f / (0.5f * window_width * 0.5f * window_width);
+
+        std::vector<float> row_bin_list, col_bin_list, magnitude_list, orientation_bin_list;
+        std::vector<std::vector<std::vector<float>>> histogram_tensor(window_width + 2, std::vector<std::vector<float>>(window_width + 2, std::vector<float>(num_bins, 0.0f)));
+
+        float hist_width = scale_multiplier * 0.5f * scale * keypoint.size;
+        int half_width = std::min(static_cast<int>(std::round(hist_width * std::sqrt(2.0f) * (window_width + 1) * 0.5f)), static_cast<int>(std::sqrt(num_rows * num_rows + num_cols * num_cols)));
+
+        for (int row = -half_width; row <= half_width; ++row) {
+            for (int col = -half_width; col <= half_width; ++col) {
+                float row_rot = col * sin_angle + row * cos_angle;
+                float col_rot = col * cos_angle - row * sin_angle;
+                float row_bin, col_bin, magnitude, orientation;
+
+                computeBinsAndMagnitudes(gaussian_image, row_rot, col_rot, hist_width, sin_angle, cos_angle, row_bin, col_bin, magnitude, orientation);
+                
+                if (row_bin > -1 && row_bin < window_width && col_bin > -1 && col_bin < window_width) {
+                    int window_row = static_cast<int>(std::round(point[1] + row));
+                    int window_col = static_cast<int>(std::round(point[0] + col));
+                    if (window_row > 0 && window_row < num_rows - 1 && window_col > 0 && window_col < num_cols - 1) {
+                        row_bin_list.push_back(row_bin);
+                        col_bin_list.push_back(col_bin);
+                        magnitude_list.push_back(magnitude);
+                        orientation_bin_list.push_back((orientation - angle) * bins_per_degree);
+                    }
+                }
+            }
+        }
+
+        trilinearInterpolation(row_bin_list, col_bin_list, magnitude_list, orientation_bin_list, histogram_tensor, num_bins);
+
+        std::vector<float> descriptor_vector = normalizeAndConvertDescriptor(histogram_tensor, window_width, num_bins, descriptor_max_value);
+        descriptors.push_back(descriptor_vector);
+    }
+
+    return descriptors;
+}
