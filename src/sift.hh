@@ -11,6 +11,7 @@ struct Keypoint {
     float x;
     float y;
     float sigma;
+    float size;
     float extremum_val;
     std::array<uint8_t, 128> descriptor;
     float angle;
