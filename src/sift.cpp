@@ -1,5 +1,6 @@
 #include "sift.hh"
 
+#include <algorithm>
 #include <cmath>
 #include <tuple>
 
@@ -11,6 +12,27 @@ namespace
   using Extrema = std::tuple<int, int, int, int>;
   using GaussianPyramid = std::vector<std::vector<Image>>;
   using DogPyramid = GaussianPyramid;
+
+  /// @brief Clean the keypoints by sorting and removing duplicates
+  /// @param keypoints
+  void clean_keypoints(std::vector<Keypoint>& keypoints)
+  {
+    std::sort(keypoints.begin(), keypoints.end());
+    auto last = std::unique(keypoints.begin(), keypoints.end());
+    keypoints.erase(last, keypoints.end());
+  }
+
+  /// @brief Compute the total scale for a given scale index
+  /// @param gaussian_kernels The successive Gaussian kernels
+  /// @param scale_idx The scale index
+  /// @return The total scale
+  float compute_scale(const std::vector<float>& gaussian_kernels, int scale_idx)
+  {
+    float start_scale = gaussian_kernels[0];
+    float current_scale = gaussian_kernels[scale_idx];
+
+    return std::sqrt(current_scale * current_scale + start_scale * start_scale);
+  }
 
   /// @brief Get the pixel cube for a given pixel in the DoG images as (z, x, y)
   /// @param dog_images DoG images
@@ -352,13 +374,13 @@ namespace
             std::cout << "Computed " << count << "/" << extrema.size()
                       << "keypoints..." << std::endl;
           }
-        auto [x, y, scale, octave] = e;
+        auto [x, y, scale_idx, octave] = e;
 
         auto dog_octave = dog_images[octave];
         int step;
         for (step = 0; step < MAX_CONVERGENCE_STEPS; ++step)
           {
-            PixelCube pixel_cube = get_pixel_cube(dog_octave, x, y, scale);
+            PixelCube pixel_cube = get_pixel_cube(dog_octave, x, y, scale_idx);
             Vector gradient = compute_gradient(pixel_cube);
             Matrix hessian = compute_hessian(pixel_cube);
             Vector offset = fit_quadratic(gradient, hessian);
@@ -367,7 +389,7 @@ namespace
               std::max(std::abs(offset[0]),
                        std::max(std::abs(offset[1]), std::abs(offset[2])));
 
-            scale += std::round(offset[0]);
+            scale_idx += std::round(offset[0]);
             x += std::round(offset[1]);
             y += std::round(offset[2]);
 
@@ -405,8 +427,8 @@ namespace
               }
 
             if (x < border || x >= (width - border) || y < border
-                || y >= (height - border) || scale < border
-                || scale >= (depth - border))
+                || y >= (height - border) || scale_idx < border
+                || scale_idx >= (depth - border))
               {
                 step = MAX_CONVERGENCE_STEPS;
                 break;
@@ -423,7 +445,8 @@ namespace
         Keypoint kp;
         kp.x = std::pow(2, octave) * x; // Scale back x to initial image size
         kp.y = std::pow(2, octave) * y; // Scale back y to initial image size
-        kp.scale = gaussian_kernels[scale];
+        kp.scale = compute_scale(gaussian_kernels, scale_idx);
+        kp.scale_idx = scale_idx;
         kp.octave = octave;
         kp.porientation = 0.0f;
         keypoints.push_back(kp);
@@ -431,6 +454,111 @@ namespace
       }
     return keypoints;
   }
+
+  /// @brief Compute the orientations of the keypoints
+  /// @param keypoints List of keypoints
+  /// @param gaussian_kernels The successive Gaussian kernels
+  /// @param gaussian_images Gaussian images for each octave
+  /// @param num_bins Number of bins for the orientation histogram
+  /// @param peak_ratio Peak ratio threshold for orientation histogram
+  /// @param scale_factor Scale factor (SIFT algorithm uses 1.5f)
+  /// @return The oriented keypoints
+  std::vector<Keypoint>
+  compute_orientations(const std::vector<Keypoint>& keypoints,
+                       const std::vector<float>& gaussian_kernels,
+                       const GaussianPyramid& gaussian_images,
+                       const int num_bins,
+                       const float peak_ratio,
+                       const float scale_factor)
+  {
+    std::vector<Keypoint> oriented_keypoints;
+
+    for (const Keypoint& kp : keypoints)
+      {
+        int octave = kp.octave;
+        int x = std::round(kp.x / std::pow(2, octave));
+        int y = std::round(kp.y / std::pow(2, octave));
+        int width = gaussian_images[octave][0].width;
+        int height = gaussian_images[octave][0].height;
+
+        float scale = kp.scale * scale_factor;
+        int radius = std::round(3 * scale);
+        std::vector<float> hist(num_bins, 0.0f);
+        Image img = gaussian_images[octave][kp.scale_idx];
+
+        // Step 1: Compute the orientation histogram
+        for (int i = -radius; i <= radius; ++i)
+          {
+            if (x + i - 1 < 0 || x + i + 1 >= width)
+              {
+                continue;
+              }
+
+            for (int j = -radius; j <= radius; ++j)
+              {
+                if (y + j - 1 < 0 || y + j + 1 >= height)
+                  {
+                    continue;
+                  }
+
+                float dx =
+                  img(x + i + 1, y + j, GRAY) - img(x + i - 1, y + j, GRAY);
+                float dy =
+                  img(x + i, y + j - 1, GRAY) - img(x + i, y + j + 1, GRAY);
+
+                float magnitude = std::sqrt(dx * dx + dy * dy);
+                float orientation = std::atan2(dy, dx) * 180.0f / M_PI;
+                float weight = std::exp(-(i * i + j * j) / (2 * scale * scale));
+                int h_idx = std::round(orientation * num_bins / 360.0f);
+                hist[h_idx] += weight * magnitude;
+              }
+          }
+
+        // Step 2: Smooth the histogram
+        std::vector<float> smoothed_hist(num_bins, 0.0f);
+        for (int i = 0; i < num_bins; ++i)
+          {
+            smoothed_hist[i] = 0.375 * hist[i]
+              + 0.25
+                * (hist[(i - 1 + num_bins) % num_bins]
+                   + hist[(i + 1) % num_bins])
+              + 0.0625
+                * (hist[(i - 2 + num_bins) % num_bins]
+                   + hist[(i + 2) % num_bins]);
+          }
+
+        // Step 3: Find the peak orientations and fit a parabola for interpolation
+        float max_peak =
+          *std::max_element(smoothed_hist.begin(), smoothed_hist.end());
+        for (int i = 0; i < num_bins; ++i)
+          {
+            float h0 = smoothed_hist[(i - 1 + num_bins) % num_bins];
+            float h1 = smoothed_hist[i];
+            float h2 = smoothed_hist[(i + 1) % num_bins];
+
+            if (h1 > (peak_ratio * max_peak) && h1 > h0 && h1 > h2)
+              {
+                float interpolated_i =
+                  i + 0.5f * (h0 - h2) / (h0 - 2 * h1 + h2);
+                interpolated_i = std::fmod(interpolated_i + num_bins, num_bins);
+                float orientation = 360.0f - interpolated_i * 360.0f / num_bins;
+                if (std::abs(orientation - 360.0f) < 1e-7)
+                  {
+                    orientation = 0.0f;
+                  }
+
+                Keypoint oriented_kp = kp;
+                oriented_kp.porientation = orientation;
+                oriented_kp.x /= 2; // Scale back x to input image size
+                oriented_kp.y /= 2; // Scale back y to input image size
+                oriented_keypoints.push_back(oriented_kp);
+              }
+          }
+      }
+
+    return oriented_keypoints;
+  }
+
 } // anonymous namespace
 
 /// @brief Detect stable keypoints in an image based on the SIFT algorithm
@@ -446,12 +574,14 @@ std::vector<Keypoint> detect_keypoints(const Image& img,
                                        const int intervals,
                                        const int window_size,
                                        const float contrast_threshold,
-                                       const float eigen_ratio)
+                                       const float eigen_ratio,
+                                       const float num_bins,
+                                       const float peak_ratio,
+                                       const float scale_factor)
 {
-  std::cout << "Detecting keypoints..." << std::endl;
-
   Image initial_image = compute_initial_image(img, init_sigma);
-  std::cout << "Initial image computed" << std::endl;
+  std::cout << "Initial image computed: " << initial_image.width << "x"
+            << initial_image.height << std::endl;
 
   int octaves_count =
     compute_octaves_count(initial_image.width, initial_image.height);
@@ -459,31 +589,42 @@ std::vector<Keypoint> detect_keypoints(const Image& img,
 
   std::vector<float> gaussian_kernels =
     compute_gaussian_kernels(init_sigma, intervals);
+  std::cout << "Gaussian kernels: [ ";
   for (float kernel : gaussian_kernels)
     {
-      std::cout << "Kernel: " << kernel << std::endl;
+      std::cout << kernel << " ";
     }
-  std::cout << "Gaussian kernels computed" << std::endl;
+  std::cout << "]" << std::endl;
 
+  std::cout << "Computing Gaussian images..." << std::endl;
   auto gaussian_images =
     compute_gaussian_images(initial_image, octaves_count, gaussian_kernels);
-  std::cout << "Gaussian images computed" << std::endl;
+  std::cout << "Gaussian images computed!" << std::endl;
 
+  std::cout << "Computing DoG images..." << std::endl;
   auto dog_images =
     compute_dog_images(gaussian_images, octaves_count, intervals);
-  std::cout << "DoG images computed" << std::endl;
+  std::cout << "DoG images computed!" << std::endl;
 
   auto extrema = detect_extrema(dog_images, gaussian_kernels, intervals,
                                 window_size, contrast_threshold);
   std::cout << "Extrema points detected: " << extrema.size() << std::endl;
 
+  std::cout << "Computing keypoints..." << std::endl;
   auto keypoints =
     compute_keypoints(dog_images, extrema, gaussian_kernels, window_size,
                       intervals, contrast_threshold, eigen_ratio);
   std::cout << "Keypoints computed: " << keypoints.size() << std::endl;
 
+  keypoints = compute_orientations(keypoints, gaussian_kernels, gaussian_images,
+                                   num_bins, peak_ratio, scale_factor);
+
+  std::cout << "Cleaning keypoints..." << std::endl;
+  clean_keypoints(keypoints);
+
   std::cout << "Drawing keypoints..." << std::endl;
-  draw_keypoints(initial_image, keypoints, 7);
+  Image keypoints_image = img;
+  draw_keypoints(keypoints_image, keypoints, 7);
   initial_image.save("keypoints.png");
 
   return keypoints;
