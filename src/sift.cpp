@@ -14,6 +14,7 @@
 
 
 static std::tuple<int, int, float> unpackOctave(const Keypoint& keypoint) {
+    std::cout << "Start unpackOctave ... " << std::endl;
     int octave = keypoint.octave & 255;
     int layer = (keypoint.octave >> 8) & 255;
     if (octave >= 128) {
@@ -25,6 +26,7 @@ static std::tuple<int, int, float> unpackOctave(const Keypoint& keypoint) {
 
 
 static void calculateGradients(const Image& gaussian_image, int window_row, int window_col, float& dx, float& dy) {
+    std::cout << " Calcul gradients ... " << std::endl;
     dx = gaussian_image.get_pixel(window_col + 1, window_row, RED) - gaussian_image.get_pixel(window_col - 1, window_row, RED);
     dy = gaussian_image.get_pixel(window_col, window_row - 1, RED) - gaussian_image.get_pixel(window_col, window_row + 1, RED);
 }
@@ -37,6 +39,7 @@ static void computeBinsAndMagnitudes(
     float row_rot, float col_rot,
     float hist_width, float sin_angle, float cos_angle,
     float& row_bin, float& col_bin, float& magnitude, float& orientation) {
+    std::cout << " Compute bins ... " << std::endl;
     
     float weight_multiplier = -0.5f / ((0.5f * 4) * (0.5f * 4));
     float dx, dy;
@@ -60,6 +63,7 @@ static void trilinearInterpolation(
     const std::vector<float>& orientation_bin_list,
     std::vector<std::vector<std::vector<float>>>& histogram_tensor,
     int num_bins) {
+    std::cout << " Interpolation ... " << std::endl;
 
     for (size_t i = 0; i < row_bin_list.size(); ++i) {
         int row_bin_floor = static_cast<int>(std::floor(row_bin_list[i]));
@@ -99,6 +103,7 @@ static void trilinearInterpolation(
 }
 
 static std::vector<float> normalizeAndConvertDescriptor(std::vector<std::vector<std::vector<float>>>& histogram_tensor, int window_width, int num_bins, float descriptor_max_value) {
+    std::cout << " Normalisation ... " << std::endl;
     std::vector<float> descriptor_vector;
     for (int i = 1; i < window_width + 1; ++i) {
         for (int j = 1; j < window_width + 1; ++j) {
@@ -141,6 +146,7 @@ std::vector<std::vector<float>> generateDescriptors(
     int num_bins,
     float scale_multiplier,
     float descriptor_max_value) {
+    std::cout << " Start generate Descriptors ... " << std::endl;
 
     std::vector<std::vector<float>> descriptors;
 
