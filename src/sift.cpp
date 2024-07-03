@@ -14,7 +14,7 @@ namespace
   using DogPyramid = GaussianPyramid;
 
   /// @brief Clean the keypoints by sorting and removing duplicates
-  /// @param keypoints
+  /// @param keypoints List of keypoints
   void clean_keypoints(std::vector<Keypoint>& keypoints)
   {
     std::sort(keypoints.begin(), keypoints.end());
@@ -129,8 +129,17 @@ namespace
   /// @return The initial image
   Image compute_initial_image(const Image& img, float sigma)
   {
-    Image gray_img = convert_to_grayscale(img);
-    Image initial_img = resize_inter_bilinear(gray_img, 2, 2);
+    Image initial_img;
+    if (img.channels != 1)
+      {
+        Image gray_img = convert_to_grayscale(img);
+        initial_img = resize_inter_bilinear(gray_img, 2, 2);
+      }
+    else
+      {
+        initial_img = resize_inter_bilinear(img, 2, 2);
+      }
+
     sigma = std::sqrt(sigma * sigma - 1);
     return apply_gaussian_blur(initial_img, sigma);
   }
@@ -511,9 +520,12 @@ namespace
                   - img(x + i, y + j + 1, Channel::GRAY);
 
                 float magnitude = std::sqrt(dx * dx + dy * dy);
-                float orientation = std::atan2(dy, dx) * 180.0f / M_PI;
+                float orientation =
+                  std::fmod(std::atan2(dy, dx) + 2 * M_PI, 2 * M_PI) * 180.0f
+                  / M_PI;
                 float weight = std::exp(-(i * i + j * j) / (2 * scale * scale));
-                int h_idx = std::round(orientation * num_bins / 360.0f);
+                int h_idx = std::fmod(
+                  std::round(orientation * num_bins / 360.0f), num_bins);
                 hist[h_idx] += weight * magnitude;
               }
           }
@@ -618,18 +630,21 @@ std::vector<Keypoint> detect_keypoints(const Image& img,
   auto keypoints =
     compute_keypoints(dog_images, extrema, gaussian_kernels, window_size,
                       intervals, contrast_threshold, eigen_ratio);
-  std::cout << "Keypoints computed: " << keypoints.size() << std::endl;
+  std::cout << "Raw keypoints computed: " << keypoints.size() << std::endl;
 
+  std::cout << "Computing orientations..." << std::endl;
   keypoints = compute_orientations(keypoints, gaussian_kernels, gaussian_images,
                                    num_bins, peak_ratio, scale_factor);
+  std::cout << "Oriented keypoints computed: " << keypoints.size() << std::endl;
 
   std::cout << "Cleaning keypoints..." << std::endl;
   clean_keypoints(keypoints);
+  std::cout << "Final keypoints: " << keypoints.size() << std::endl;
 
   std::cout << "Drawing keypoints..." << std::endl;
-  Image keypoints_image = img;
+  Image keypoints_image(img);
   draw_keypoints(keypoints_image, keypoints, gaussian_kernels.size());
-  initial_image.save("keypoints.png");
+  keypoints_image.save("keypoints.png");
 
   return keypoints;
 }

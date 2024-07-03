@@ -38,6 +38,14 @@ struct Keypoint
   bool operator>(const Keypoint& kp) const { return kp < *this; }
   bool operator<=(const Keypoint& kp) const { return !(kp < *this); }
   bool operator>=(const Keypoint& kp) const { return !(*this < kp); }
+
+  friend std::ostream& operator<<(std::ostream& os, const Keypoint& kp)
+  {
+    os << "Keypoint: x=" << kp.x << ", y=" << kp.y << ", octave=" << kp.octave
+       << ", scale=" << kp.scale << ", scale_idx=" << kp.scale_idx
+       << ", porientation=" << kp.porientation;
+    return os;
+  }
 };
 
 std::vector<Keypoint> detect_keypoints(const Image& img,
