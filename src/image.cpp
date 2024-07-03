@@ -12,11 +12,11 @@ Image convert_to_grayscale(const Image& img)
     {
       for (int j = 0; j < new_img.height; j++)
         {
-          float r = img(i, j, RED);
-          float g = img(i, j, GREEN);
-          float b = img(i, j, BLUE);
+          float r = img(i, j, R);
+          float g = img(i, j, G);
+          float b = img(i, j, B);
           int value = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-          new_img.set_pixel(i, j, GRAY, value);
+          new_img.set_pixel(i, j, Channel::GRAY, value);
         }
     }
   return new_img;
@@ -172,35 +172,113 @@ Image apply_gaussian_blur(const Image& img, float sigma)
   return apply_convolution(img, kernel);
 }
 
-void Image::draw_point(int x, int y, int size)
+/// @brief Draw keypoints on an image
+/// @param x Pixel x-coordinate
+/// @param y Pixel y-coordinate
+/// @param size Size of the point
+/// @param color Color of the point
+void Image::draw_point(int x, int y, int size, int color)
 {
-  for (int i = x - size / 2; i < x + size / 2; i++)
+  if (channels == 1)
     {
-      for (int j = y - size / 2; j < y + size / 2; j++)
+      throw std::runtime_error("Cannot draw point on grayscale image");
+    }
+  for (int i = -size / 2; i <= size / 2; i++)
+    {
+      if (x + i < 0 || x + i >= width)
         {
-          if (i < 0 || i >= width || j < 0 || j >= height)
+          continue;
+        }
+      for (int j = -size / 2; j <= size / 2; j++)
+        {
+          if (y + j < 0 || y + j >= height)
             {
               continue;
             }
+          set_pixel(x + i, y + j, R, (color & 0xFF0000) >> 16);
+          set_pixel(x + i, y + j, G, (color & 0x00FF00) >> 8);
+          set_pixel(x + i, y + j, B, color & 0x0000FF);
+        }
+    }
+}
 
-          if (channels == 1)
-            {
-              set_pixel(i, j, GRAY, 255);
-              continue;
-            }
+/// @brief Draw a line on an image
+/// @param x1 Start x-coordinate
+/// @param y1 Start y-coordinate
+/// @param x2 End x-coordinate
+/// @param y2 End y-coordinate
+/// @param color Color of the line
+/// @param thickness Thickness of the line
+void Image::draw_line(int x1, int y1, int x2, int y2, int color, int thickness)
+{
+  if (channels == 1)
+    {
+      throw std::runtime_error("Cannot draw line on grayscale image");
+    }
+  int dx = std::abs(x2 - x1);
+  int dy = std::abs(y2 - y1);
+  int sx = (x1 < x2) ? 1 : -1;
+  int sy = (y1 < y2) ? 1 : -1;
+  int err = dx - dy;
 
-          if (i == x && j == y)
-            {
-              set_pixel(i, j, RED, 255);
-              set_pixel(i, j, GREEN, 0);
-              set_pixel(i, j, BLUE, 0);
-            }
-          else
-            {
-              set_pixel(i, j, RED, 255);
-              set_pixel(i, j, GREEN, 165);
-              set_pixel(i, j, BLUE, 0);
-            }
+  while (true)
+    {
+      draw_point(x1, y1, thickness, color);
+
+      if (x1 == x2 && y1 == y2)
+        {
+          break;
+        }
+      int e2 = 2 * err;
+      if (e2 > -dy)
+        {
+          err -= dy;
+          x1 += sx;
+        }
+      if (e2 < dx)
+        {
+          err += dx;
+          y1 += sy;
+        }
+    }
+}
+
+/// @brief Draw a circle on an image
+/// @param x Circle center x-coordinate
+/// @param y Circle center y-coordinate
+/// @param radius Circle radius
+/// @param color Circle color
+/// @param thickness Circle thickness
+void Image::draw_circle(int x, int y, int radius, int color, int thickness)
+{
+  if (channels == 1)
+    {
+      throw std::runtime_error("Cannot draw circle on grayscale image");
+    }
+  int x0 = radius;
+  int y0 = 0;
+  int err = 0;
+
+  while (x0 >= y0)
+    {
+      draw_point(x + x0, y + y0, thickness, color);
+      draw_point(x + y0, y + x0, thickness, color);
+      draw_point(x - y0, y + x0, thickness, color);
+      draw_point(x - x0, y + y0, thickness, color);
+      draw_point(x - x0, y - y0, thickness, color);
+      draw_point(x - y0, y - x0, thickness, color);
+      draw_point(x + y0, y - x0, thickness, color);
+      draw_point(x + x0, y - y0, thickness, color);
+
+      if (err <= 0)
+        {
+          y0 += 1;
+          err += 2 * y0 + 1;
+        }
+      if (err > 0)
+        {
+          x0 -= 1;
+          err -= 2 * x0 + 1;
         }
     }
 }

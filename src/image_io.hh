@@ -6,10 +6,10 @@
 
 enum Channel
 {
-  GRAY = 0,
-  RED = 0,
-  GREEN = 1,
-  BLUE = 2
+  R = 0,
+  G = 1,
+  B = 2,
+  GRAY = 0
 };
 
 enum ImageFormat
@@ -18,6 +18,18 @@ enum ImageFormat
   BMP,
   TGA,
   JPG
+};
+
+enum Color
+{
+  BLACK = 0,
+  WHITE = 0xFFFFFF,
+  RED = 0xFF0000,
+  GREEN = 0x00FF00,
+  BLUE = 0x0000FF,
+  YELLOW = 0xFFFF00,
+  CYAN = 0x00FFFF,
+  MAGENTA = 0xFF00FF
 };
 
 struct Image
@@ -45,5 +57,9 @@ struct Image
   int operator()(int x, int y, Channel c) const;
 
   // Drawing methods
-  void draw_point(int x, int y, int size = 5);
+  void draw_point(int x, int y, int size, int color = RED);
+  void
+  draw_circle(int x, int y, int radius, int color = RED, int thickness = 5);
+  void
+  draw_line(int x1, int y1, int x2, int y2, int color = RED, int thickness = 5);
 };

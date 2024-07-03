@@ -51,7 +51,8 @@ namespace
             for (int dy = -1; dy <= 1; ++dy)
               {
                 pixel_cube[dz + 1][dx + 1][dy + 1] =
-                  dog_images[z + dz].get_pixel(x + dx, y + dy, GRAY) / 255.0f;
+                  dog_images[z + dz].get_pixel(x + dx, y + dy, Channel::GRAY)
+                  / 255.0f;
               }
           }
       }
@@ -273,7 +274,7 @@ namespace
             for (int z = border; z < depth - border; ++z)
               {
                 bool is_extremum = true;
-                int pixel = octave_dog_images[z].get_pixel(x, y, GRAY);
+                int pixel = octave_dog_images[z].get_pixel(x, y, Channel::GRAY);
                 if (std::abs(pixel) <= threshold)
                   {
                     continue;
@@ -291,7 +292,7 @@ namespace
                               }
 
                             int dpixel = octave_dog_images[z + dz].get_pixel(
-                              x + dx, y + dy, GRAY);
+                              x + dx, y + dy, Channel::GRAY);
                             if (std::abs(pixel) <= std::abs(dpixel))
                               {
                                 is_extremum = false;
@@ -371,8 +372,8 @@ namespace
       {
         if (count % 100 == 0)
           {
-            std::cout << "Computed " << count << "/" << extrema.size()
-                      << "keypoints..." << std::endl;
+            std::cout << "Computed keypoints " << count << "/" << extrema.size()
+                      << "..." << std::endl;
           }
         auto [x, y, scale_idx, octave] = e;
 
@@ -476,13 +477,16 @@ namespace
     for (const Keypoint& kp : keypoints)
       {
         int octave = kp.octave;
-        int x = std::round(kp.x / std::pow(2, octave));
-        int y = std::round(kp.y / std::pow(2, octave));
+        int x =
+          std::round(kp.x / std::pow(2, octave)); // Scale back x to octave size
+        int y =
+          std::round(kp.y / std::pow(2, octave)); // Scale back y to octave size
         int width = gaussian_images[octave][0].width;
         int height = gaussian_images[octave][0].height;
 
         float scale = kp.scale * scale_factor;
-        int radius = std::round(3 * scale);
+        int radius =
+          std::round(3 * scale); // 3-sigma to cover 99.7% of the distribution
         std::vector<float> hist(num_bins, 0.0f);
         Image img = gaussian_images[octave][kp.scale_idx];
 
@@ -501,10 +505,10 @@ namespace
                     continue;
                   }
 
-                float dx =
-                  img(x + i + 1, y + j, GRAY) - img(x + i - 1, y + j, GRAY);
-                float dy =
-                  img(x + i, y + j - 1, GRAY) - img(x + i, y + j + 1, GRAY);
+                float dx = img(x + i + 1, y + j, Channel::GRAY)
+                  - img(x + i - 1, y + j, Channel::GRAY);
+                float dy = img(x + i, y + j - 1, Channel::GRAY)
+                  - img(x + i, y + j + 1, Channel::GRAY);
 
                 float magnitude = std::sqrt(dx * dx + dy * dy);
                 float orientation = std::atan2(dy, dx) * 180.0f / M_PI;
@@ -624,7 +628,7 @@ std::vector<Keypoint> detect_keypoints(const Image& img,
 
   std::cout << "Drawing keypoints..." << std::endl;
   Image keypoints_image = img;
-  draw_keypoints(keypoints_image, keypoints, 7);
+  draw_keypoints(keypoints_image, keypoints, gaussian_kernels.size());
   initial_image.save("keypoints.png");
 
   return keypoints;
@@ -632,10 +636,29 @@ std::vector<Keypoint> detect_keypoints(const Image& img,
 
 void draw_keypoints(Image& img,
                     const std::vector<Keypoint>& keypoints,
-                    int size)
+                    float scales_count)
 {
+  // Color map
+  std::vector<Color> colors = {Color::RED,    Color::GREEN,   Color::BLUE,
+                               Color::YELLOW, Color::MAGENTA, Color::CYAN,
+                               Color::BLACK};
+
+  const float max_radius = 150;
+  const float min_radius = 20;
   for (const Keypoint& kp : keypoints)
     {
-      img.draw_point(kp.x, kp.y, size);
+      int centerX = kp.x;
+      int centerY = kp.y;
+      float angle = kp.porientation;
+      int radius = min_radius
+        * std::exp(kp.scale_idx / (scales_count - 1)
+                   * std::log(max_radius / min_radius));
+      int color = colors[kp.scale_idx % colors.size()];
+
+      img.draw_circle(centerX, centerY, radius, color);
+
+      int x2 = centerX + radius * std::cos(angle * M_PI / 180.0f);
+      int y2 = centerY + radius * std::sin(angle * M_PI / 180.0f);
+      img.draw_line(centerX, centerY, x2, y2, color);
     }
 }

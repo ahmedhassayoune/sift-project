@@ -7,12 +7,12 @@
 
 struct Keypoint
 {
-  int x;
-  int y;
-  int octave;
-  float scale;
-  int scale_idx;
-  float porientation;
+  int x;              // x-coordinate in input image
+  int y;              // y-coordinate in input image
+  int octave;         // octave layer index
+  float scale;        // gaussian blur sigma
+  int scale_idx;      // scale index in octave
+  float porientation; // principal orientation in degrees (0-360)
 
   bool operator==(const Keypoint& kp) const
   {
@@ -52,4 +52,4 @@ std::vector<Keypoint> detect_keypoints(const Image& img,
 
 void draw_keypoints(Image& img,
                     const std::vector<Keypoint>& keypoints,
-                    int size = 5);
+                    float scales_count);
