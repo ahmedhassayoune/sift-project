@@ -15,18 +15,25 @@
 
 static std::tuple<int, int, float> unpackOctave(const Keypoint& keypoint) {
     std::cout << "Start unpackOctave ... " << std::endl;
-    int octave = keypoint.octave & 255;
-    int layer = (keypoint.octave >> 8) & 255;
+    int octave = keypoint.octave & 255;  // masque les 8 premiers bits
+    std::cout << "octave (masked): " << octave << std::endl;
+    int layer = (keypoint.octave >> 8) & 255;  // déplace de 8 bits à droite et masque les 8 premiers bits
+    std::cout << "layer : " << layer << std::endl;
+
+    // Convertir l'octave en un nombre signé si nécessaire
     if (octave >= 128) {
-        octave = octave | -128;
+        octave = octave - 256;
+        std::cout << "octave (signed): " << octave << std::endl;
     }
+
     float scale = (octave >= 0) ? 1.0f / (1 << octave) : static_cast<float>(1 << -octave);
+
+    std::cout << "scale : " << scale << std::endl;
     return {octave, layer, scale};
 }
 
-
 static void calculateGradients(const Image& gaussian_image, int window_row, int window_col, float& dx, float& dy) {
-    std::cout << " Calcul gradients ... " << std::endl;
+    //std::cout << " Calcul gradients ... " << std::endl;
     dx = gaussian_image.get_pixel(window_col + 1, window_row, RED) - gaussian_image.get_pixel(window_col - 1, window_row, RED);
     dy = gaussian_image.get_pixel(window_col, window_row - 1, RED) - gaussian_image.get_pixel(window_col, window_row + 1, RED);
 }
@@ -39,7 +46,7 @@ static void computeBinsAndMagnitudes(
     float row_rot, float col_rot,
     float hist_width, float sin_angle, float cos_angle,
     float& row_bin, float& col_bin, float& magnitude, float& orientation) {
-    std::cout << " Compute bins ... " << std::endl;
+    //std::cout << " Compute bins ... " << std::endl;
     
     float weight_multiplier = -0.5f / ((0.5f * 4) * (0.5f * 4));
     float dx, dy;
@@ -152,7 +159,11 @@ std::vector<std::vector<float>> generateDescriptors(
 
     for (const auto& keypoint : keypoints) {
         auto [octave, layer, scale] = unpackOctave(keypoint);
-        const Image& gaussian_image = gaussian_pyramid.octaves[octave + 1][layer];
+        std::cout << "octave : " << octave << std::endl;
+        std::cout << "size octaves: " << gaussian_pyramid.octaves.size() << std::endl;
+        std::cout << gaussian_pyramid.octaves[octave + 1][layer].width << std::endl;
+        std::cout << gaussian_pyramid.octaves[octave + 1][layer].height << std::endl;
+        const Image gaussian_image = gaussian_pyramid.octaves[octave + 1][layer];
         int num_rows = gaussian_image.height;
         int num_cols = gaussian_image.width;
         std::vector<int> point = {static_cast<int>(std::round(scale * keypoint.x)), static_cast<int>(std::round(scale * keypoint.y))};
@@ -175,9 +186,12 @@ std::vector<std::vector<float>> generateDescriptors(
                 float col_rot = col * cos_angle - row * sin_angle;
                 float row_bin, col_bin, magnitude, orientation;
 
-                computeBinsAndMagnitudes(gaussian_image, row_rot, col_rot, hist_width, sin_angle, cos_angle, row_bin, col_bin, magnitude, orientation);
+                // if (window_col + 1 >= gaussian_image.height || window_row + 1 >= gaussian_image.width || window_col - 1 < 0 || window_row - 1 < 0)
+                //     continue;
+
                 
-                if (row_bin > -1 && row_bin < window_width && col_bin > -1 && col_bin < window_width) {
+                if (row_bin - 1 > -1 && row_bin + 1 < window_width && col_bin - 1 > -1 && col_bin + 1 < window_width) {
+                    computeBinsAndMagnitudes(gaussian_image, row_rot, col_rot, hist_width, sin_angle, cos_angle, row_bin, col_bin, magnitude, orientation);
                     int window_row = static_cast<int>(std::round(point[1] + row));
                     int window_col = static_cast<int>(std::round(point[0] + col));
                     if (window_row > 0 && window_row < num_rows - 1 && window_col > 0 && window_col < num_cols - 1) {
