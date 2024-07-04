@@ -59,7 +59,7 @@ struct Image
   // Drawing methods
   void draw_point(int x, int y, int size, int color = RED);
   void
-  draw_circle(int x, int y, int radius, int color = RED, int thickness = 2);
+  draw_circle(int x, int y, int radius, int color = RED, int thickness = 1);
   void
-  draw_line(int x1, int y1, int x2, int y2, int color = RED, int thickness = 2);
+  draw_line(int x1, int y1, int x2, int y2, int color = RED, int thickness = 1);
 };

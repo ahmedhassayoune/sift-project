@@ -357,7 +357,9 @@ namespace
                  const float contrast_threshold)
   {
     std::vector<Extrema> total_extrema;
-    const float threshold = 255.0f * 0.8f * contrast_threshold;
+    const float threshold =
+      floor(0.5f * contrast_threshold / static_cast<float>(intervals)
+            * 255.0f); // OpenCV formula
 
     int octaves = dog_images.size();
     for (int octave = 0; octave < octaves; ++octave)
