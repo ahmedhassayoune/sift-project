@@ -7,6 +7,11 @@
 /// @return The grayscale image
 Image convert_to_grayscale(const Image& img)
 {
+  if (img.channels == 1)
+    {
+      return img;
+    }
+
   Image new_img(img.width, img.height, 1);
   for (int i = 0; i < new_img.width; i++)
     {
@@ -15,7 +20,7 @@ Image convert_to_grayscale(const Image& img)
           float r = img(i, j, R);
           float g = img(i, j, G);
           float b = img(i, j, B);
-          int value = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+          float value = 0.2126f * r + 0.7152f * g + 0.0722f * b;
           new_img.set_pixel(i, j, Channel::GRAY, value);
         }
     }

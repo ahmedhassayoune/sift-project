@@ -51,8 +51,7 @@ namespace
             for (int dy = -1; dy <= 1; ++dy)
               {
                 pixel_cube[dz + 1][dx + 1][dy + 1] =
-                  dog_images[z + dz].get_pixel(x + dx, y + dy, Channel::GRAY)
-                  / 255.0f;
+                  dog_images[z + dz](x + dx, y + dy, Channel::GRAY) / 255.0f;
               }
           }
       }
@@ -257,6 +256,49 @@ namespace
     return dog_images;
   }
 
+  bool is_extremum(const std::vector<Image>& octave_dog_images,
+                   int x,
+                   int y,
+                   int z,
+                   int border)
+  {
+    int is_max = true;
+    int is_min = true;
+    float pixel = octave_dog_images[z](x, y, Channel::GRAY);
+    for (int dx = -border; dx <= border; ++dx)
+      {
+        for (int dy = -border; dy <= border; ++dy)
+          {
+            for (int dz = -border; dz <= border; ++dz)
+              {
+                if (dx == 0 && dy == 0 && dz == 0)
+                  {
+                    continue;
+                  }
+
+                float dpixel =
+                  octave_dog_images[z + dz](x + dx, y + dy, Channel::GRAY);
+
+                if (pixel < dpixel)
+                  {
+                    is_max = false;
+                  }
+                if (pixel > dpixel)
+                  {
+                    is_min = false;
+                  }
+
+                if (!is_min && !is_max)
+                  {
+                    return false;
+                  }
+              }
+          }
+      }
+
+    return true;
+  }
+
   /// @brief Detect extrema in an octave of DoG images
   /// @param octave_dog_images DoG images for an octave
   /// @param octave The octave index
@@ -276,41 +318,20 @@ namespace
     const int depth = octave_dog_images.size();
     const int border = window_size / 2;
 
+    // Go through the DoG images with a wsxwsxws window
     for (int x = border; x < width - border; ++x)
       {
         for (int y = border; y < height - border; ++y)
           {
             for (int z = border; z < depth - border; ++z)
               {
-                bool is_extremum = true;
-                int pixel = octave_dog_images[z].get_pixel(x, y, Channel::GRAY);
+                float pixel = octave_dog_images[z](x, y, Channel::GRAY);
                 if (std::abs(pixel) <= threshold)
                   {
                     continue;
                   }
 
-                for (int dx = -border; (dx <= border) && is_extremum; ++dx)
-                  {
-                    for (int dy = -border; (dy <= border) && is_extremum; ++dy)
-                      {
-                        for (int dz = -border; dz <= border; ++dz)
-                          {
-                            if (dx == 0 && dy == 0 && dz == 0)
-                              {
-                                continue;
-                              }
-
-                            int dpixel = octave_dog_images[z + dz].get_pixel(
-                              x + dx, y + dy, Channel::GRAY);
-                            if (std::abs(pixel) <= std::abs(dpixel))
-                              {
-                                is_extremum = false;
-                                break;
-                              }
-                          }
-                      }
-                  }
-                if (is_extremum)
+                if (is_extremum(octave_dog_images, x, y, z, border))
                   {
                     extrema.push_back({x, y, z, octave});
                   }
@@ -336,8 +357,7 @@ namespace
                  const float contrast_threshold)
   {
     std::vector<Extrema> total_extrema;
-    const int threshold =
-      std::floor(255 * 0.5 * contrast_threshold / intervals);
+    const float threshold = 255.0f * 0.8f * contrast_threshold;
 
     int octaves = dog_images.size();
     for (int octave = 0; octave < octaves; ++octave)
@@ -423,7 +443,7 @@ namespace
                 // Step 2: Check if the extremum is not on the edge
                 float xy_hessian_trace = hessian[1][1] + hessian[2][2];
                 float xy_hessian_det =
-                  hessian[1][1] * hessian[2][2] - hessian[1][2] * hessian[2][1];
+                  hessian[1][1] * hessian[2][2] - hessian[1][2] * hessian[1][2];
 
                 bool valid_edge = (std::pow(xy_hessian_trace, 2) * eigen_ratio)
                   < (std::pow(eigen_ratio + 1, 2) * xy_hessian_det);
@@ -658,8 +678,8 @@ void draw_keypoints(Image& img,
                                Color::YELLOW, Color::MAGENTA, Color::CYAN,
                                Color::BLACK};
 
-  const float max_radius = 150;
-  const float min_radius = 20;
+  const float max_radius = 110;
+  const float min_radius = 5;
   for (const Keypoint& kp : keypoints)
     {
       int centerX = kp.x;

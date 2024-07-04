@@ -37,7 +37,7 @@ struct Image
   int width;
   int height;
   int channels;
-  std::vector<int> data;
+  std::vector<float> data;
 
   Image();
   Image(int w, int h, int c);
@@ -48,18 +48,18 @@ struct Image
   Image& operator=(const Image& other);
   size_t size() const;
 
-  int get_pixel(int x, int y, Channel c) const;
-  void set_pixel(int x, int y, Channel c, int value);
+  float get_pixel(int x, int y, Channel c) const;
+  void set_pixel(int x, int y, Channel c, float value);
   bool save(const char* filename, const ImageFormat format = PNG) const;
   bool save(const std::string filename, const ImageFormat format = PNG) const;
 
   // Indexing methods
-  int operator()(int x, int y, Channel c) const;
+  float operator()(int x, int y, Channel c) const;
 
   // Drawing methods
   void draw_point(int x, int y, int size, int color = RED);
   void
-  draw_circle(int x, int y, int radius, int color = RED, int thickness = 3);
+  draw_circle(int x, int y, int radius, int color = RED, int thickness = 2);
   void
-  draw_line(int x1, int y1, int x2, int y2, int color = RED, int thickness = 3);
+  draw_line(int x1, int y1, int x2, int y2, int color = RED, int thickness = 2);
 };

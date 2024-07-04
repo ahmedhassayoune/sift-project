@@ -93,7 +93,7 @@ size_t Image::size() const { return width * height * channels; }
 /// @param y y-coordinate
 /// @param c channel
 /// @return Pixel channel value
-int Image::get_pixel(int x, int y, Channel c) const
+float Image::get_pixel(int x, int y, Channel c) const
 {
   return data[(y * width + x) * channels + c];
 }
@@ -103,7 +103,7 @@ int Image::get_pixel(int x, int y, Channel c) const
 /// @param y y-coordinate
 /// @param c channel
 /// @param value Pixel channel value
-void Image::set_pixel(int x, int y, Channel c, int value)
+void Image::set_pixel(int x, int y, Channel c, float value)
 {
   data[(y * width + x) * channels + c] = value;
 }
@@ -120,7 +120,7 @@ bool Image::save(const char* filename, const ImageFormat format) const
     {
       // Clamp the pixel values to [0, 255]
       uint8_t result =
-        static_cast<uint8_t>(std::max(0, std::min(255, this->data[i])));
+        static_cast<uint8_t>(std::max(0.0f, std::min(255.0f, this->data[i])));
       data8[i] = result;
     }
 
@@ -155,7 +155,7 @@ bool Image::save(const std::string filename, const ImageFormat format) const
 /// @param y y-coordinate
 /// @param c channel
 /// @return Pixel channel value
-int Image::operator()(int x, int y, Channel c) const
+float Image::operator()(int x, int y, Channel c) const
 {
   return get_pixel(x, y, c);
 }
