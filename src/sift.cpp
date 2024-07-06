@@ -38,31 +38,70 @@ static void calculateGradients(const Image& gaussian_image, int window_row, int 
     dy = gaussian_image.get_pixel(window_col, window_row - 1, RED) - gaussian_image.get_pixel(window_col, window_row + 1, RED);
 }
 
-#define CALCULATE_BINS(rot, hist_width, bin) \
-    bin = ((rot) / (hist_width)) + 0.5f * 4 - 0.5f;
+float calculate_bin(float rot, float hist_width) {
+    if (hist_width != 0 && !std::isnan(rot) && !std::isnan(hist_width)) {
+        return ((rot) / (hist_width)) + 0.5f * 4 - 0.5f;
+    } else {
+        std::cerr << "Invalid hist_width or rot value in calculate_bin" << std::endl;
+        return 0.0f;
+    }
+}
 
 static void computeBinsAndMagnitudes(
     const Image& gaussian_image,
     float row_rot, float col_rot,
     float hist_width, float sin_angle, float cos_angle,
     float& row_bin, float& col_bin, float& magnitude, float& orientation) {
-    //std::cout << " Compute bins ... " << std::endl;
-    
+
     float weight_multiplier = -0.5f / ((0.5f * 4) * (0.5f * 4));
     float dx, dy;
+
     calculateGradients(gaussian_image, static_cast<int>(col_rot), static_cast<int>(row_rot), dx, dy);
     magnitude = std::sqrt(dx * dx + dy * dy);
+
+    if (std::isnan(magnitude)) {
+        std::cerr << "NaN detected in magnitude calculation" << std::endl;
+        row_bin = col_bin = orientation = 0;
+        return;
+    }
+
     orientation = std::atan2(dy, dx) * 180.0f / M_PI;
-    if (orientation < 0)
+    if (orientation < 0) {
         orientation += 360.0f;
+    }
 
-    CALCULATE_BINS(row_rot, hist_width, row_bin);
-    CALCULATE_BINS(col_rot, hist_width, col_bin);
-    
+    if (std::isnan(row_rot) || std::isnan(col_rot) || std::isnan(hist_width)) {
+        std::cerr << "Invalid row_rot, col_rot, or hist_width value before bin calculation" << std::endl;
+        row_bin = col_bin = orientation = 0;
+        return;
+    }
+
+    row_bin = calculate_bin(row_rot, hist_width);
+    col_bin = calculate_bin(col_rot, hist_width);
+
+    if (std::isnan(row_bin) || std::isnan(col_bin)) {
+        std::cerr << "NaN detected in bin calculation" << std::endl;
+        row_bin = col_bin = orientation = 0;
+        return;
+    }
+
     float weight = std::exp(weight_multiplier * ((row_rot / hist_width) * (row_rot / hist_width) + (col_rot / hist_width) * (col_rot / hist_width)));
-    magnitude *= weight;
-}
 
+    if (std::isnan(weight)) {
+        std::cerr << "NaN detected in weight calculation" << std::endl;
+    }
+    if (std::isnan(magnitude)) {
+        std::cerr << "NaN detected before weight multiplication" << std::endl;
+    }
+
+    magnitude *= weight;
+
+    if (std::isnan(magnitude)) {
+        std::cerr << "NaN detected after weight multiplication" << std::endl;
+        row_bin = col_bin = orientation = 0;
+    }
+}
+   
 static void trilinearInterpolation(
     const std::vector<float>& row_bin_list,
     const std::vector<float>& col_bin_list,
@@ -161,6 +200,14 @@ std::vector<std::vector<float>> generateDescriptors(
         auto [octave, layer, scale] = unpackOctave(keypoint);
         std::cout << "octave : " << octave << std::endl;
         std::cout << "size octaves: " << gaussian_pyramid.octaves.size() << std::endl;
+        
+        // Vérification des indices valides
+        if (octave + 1 < 0 || octave + 1 >= gaussian_pyramid.octaves.size() || 
+            layer < 0 || layer >= gaussian_pyramid.octaves[octave + 1].size()) {
+            std::cerr << "Invalid octave or layer index." << std::endl;
+            continue;
+        }
+
         std::cout << gaussian_pyramid.octaves[octave + 1][layer].width << std::endl;
         std::cout << gaussian_pyramid.octaves[octave + 1][layer].height << std::endl;
         const Image gaussian_image = gaussian_pyramid.octaves[octave + 1][layer];
@@ -172,7 +219,6 @@ std::vector<std::vector<float>> generateDescriptors(
         float angle = 360.0f - keypoint.angle;
         float cos_angle = std::cos(angle * M_PI / 180.0f);
         float sin_angle = std::sin(angle * M_PI / 180.0f);
-        //float weight_multiplier = -0.5f / (0.5f * window_width * 0.5f * window_width);
 
         std::vector<float> row_bin_list, col_bin_list, magnitude_list, orientation_bin_list;
         std::vector<std::vector<std::vector<float>>> histogram_tensor(window_width + 2, std::vector<std::vector<float>>(window_width + 2, std::vector<float>(num_bins, 0.0f)));
@@ -186,12 +232,9 @@ std::vector<std::vector<float>> generateDescriptors(
                 float col_rot = col * cos_angle - row * sin_angle;
                 float row_bin, col_bin, magnitude, orientation;
 
-                // if (window_col + 1 >= gaussian_image.height || window_row + 1 >= gaussian_image.width || window_col - 1 < 0 || window_row - 1 < 0)
-                //     continue;
+                computeBinsAndMagnitudes(gaussian_image, row_rot, col_rot, hist_width, sin_angle, cos_angle, row_bin, col_bin, magnitude, orientation);
 
-                
-                if (row_bin - 1 > -1 && row_bin + 1 < window_width && col_bin - 1 > -1 && col_bin + 1 < window_width) {
-                    computeBinsAndMagnitudes(gaussian_image, row_rot, col_rot, hist_width, sin_angle, cos_angle, row_bin, col_bin, magnitude, orientation);
+                if (row_bin > -1 && row_bin < window_width && col_bin > -1 && col_bin < window_width) {
                     int window_row = static_cast<int>(std::round(point[1] + row));
                     int window_col = static_cast<int>(std::round(point[0] + col));
                     if (window_row > 0 && window_row < num_rows - 1 && window_col > 0 && window_col < num_cols - 1) {
@@ -207,9 +250,12 @@ std::vector<std::vector<float>> generateDescriptors(
         trilinearInterpolation(row_bin_list, col_bin_list, magnitude_list, orientation_bin_list, histogram_tensor, num_bins);
 
         std::vector<float> descriptor_vector = normalizeAndConvertDescriptor(histogram_tensor, window_width, num_bins, descriptor_max_value);
+        bool has_nan = std::any_of(descriptor_vector.begin(), descriptor_vector.end(), [](float value) { return std::isnan(value); });
+        if (has_nan) {
+            std::cerr << "NaN detected in descriptor_vector" << std::endl;
+        }
         descriptors.push_back(descriptor_vector);
     }
 
     return descriptors;
 }
-
