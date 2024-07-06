@@ -10,13 +10,13 @@ struct Keypoint
   int x;              // x-coordinate in input image
   int y;              // y-coordinate in input image
   int octave;         // octave layer index
-  float scale;        // gaussian blur sigma
+  float sigma;        // gaussian blur sigma
   int scale_idx;      // scale index in octave
   float porientation; // principal orientation in degrees (0-360)
 
   bool operator==(const Keypoint& kp) const
   {
-    return x == kp.x && y == kp.y && octave == kp.octave && scale == kp.scale
+    return x == kp.x && y == kp.y && octave == kp.octave && sigma == kp.sigma
       && porientation == kp.porientation;
   }
 
@@ -28,8 +28,8 @@ struct Keypoint
       return x < kp.x;
     if (y != kp.y)
       return y < kp.y;
-    if (scale != kp.scale)
-      return scale > kp.scale;
+    if (sigma != kp.sigma)
+      return sigma > kp.sigma;
     if (porientation != kp.porientation)
       return porientation < kp.porientation;
     return octave > kp.octave;
@@ -42,7 +42,7 @@ struct Keypoint
   friend std::ostream& operator<<(std::ostream& os, const Keypoint& kp)
   {
     os << "Keypoint: x=" << kp.x << ", y=" << kp.y << ", octave=" << kp.octave
-       << ", scale=" << kp.scale << ", scale_idx=" << kp.scale_idx
+       << ", sigma=" << kp.sigma << ", scale_idx=" << kp.scale_idx
        << ", porientation=" << kp.porientation;
     return os;
   }

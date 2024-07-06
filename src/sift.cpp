@@ -22,16 +22,16 @@ namespace
     keypoints.erase(last, keypoints.end());
   }
 
-  /// @brief Compute the total scale for a given scale index
+  /// @brief Compute the total sigma for a given scale index
   /// @param gaussian_kernels The successive Gaussian kernels
   /// @param scale_idx The scale index
-  /// @return The total scale
-  float compute_scale(const std::vector<float>& gaussian_kernels, int scale_idx)
+  /// @return The total sigma
+  float compute_sigma(const std::vector<float>& gaussian_kernels, int scale_idx)
   {
-    float start_scale = gaussian_kernels[0];
-    float current_scale = gaussian_kernels[scale_idx];
+    float start_sigma = gaussian_kernels[0];
+    float current_sigma = gaussian_kernels[scale_idx];
 
-    return std::sqrt(current_scale * current_scale + start_scale * start_scale);
+    return std::sqrt(current_sigma * current_sigma + start_sigma * start_sigma);
   }
 
   /// @brief Get the pixel cube for a given pixel in the DoG images as (z, x, y)
@@ -477,7 +477,7 @@ namespace
         Keypoint kp;
         kp.x = std::pow(2, octave) * x; // Scale back x to initial image size
         kp.y = std::pow(2, octave) * y; // Scale back y to initial image size
-        kp.scale = compute_scale(gaussian_kernels, scale_idx);
+        kp.sigma = compute_sigma(gaussian_kernels, scale_idx);
         kp.scale_idx = scale_idx;
         kp.octave = octave;
         kp.porientation = 0.0f;
@@ -515,7 +515,7 @@ namespace
         int width = gaussian_images[octave][0].width;
         int height = gaussian_images[octave][0].height;
 
-        float scale = kp.scale * scale_factor;
+        float scale = kp.sigma * scale_factor;
         int radius =
           std::round(3 * scale); // 3-sigma to cover 99.7% of the distribution
         std::vector<float> hist(num_bins, 0.0f);
