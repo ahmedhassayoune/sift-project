@@ -89,3 +89,9 @@ Desktop.ini
 
 # Linux
 *~
+
+# images
+*.png
+*.jpg
+*.jpeg
+*.bmp
