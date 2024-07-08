@@ -1,3 +1,7 @@
+# Project specific files
+*.png
+*.jpg
+
 # Compiled object files
 stab
 *.o
@@ -26,7 +30,7 @@ stab
 *.stackdump
 *.log
 
-# IDE specific files
+# -- IDE specific files
 # CLion
 .idea/
 cmake-build-debug/
@@ -76,7 +80,7 @@ CTestTestfile.cmake
 .idea/
 .idea/*
 
-# OS specific files
+# -- OS specific files
 # macOS
 .DS_Store
 .AppleDouble
