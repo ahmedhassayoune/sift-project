@@ -48,6 +48,15 @@ struct Keypoint
   }
 };
 
+struct KeypointMatch {
+    Keypoint kp1;
+    Keypoint kp2;
+    float distance;
+
+    KeypointMatch(const Keypoint& keypoint1, const Keypoint& keypoint2, float dist)
+        : kp1(keypoint1), kp2(keypoint2), distance(dist) {}
+};
+
 std::vector<Keypoint> detect_keypoints(const Image& img,
                                        const float init_sigma = 1.6f,
                                        const int intervals = 3,
@@ -61,3 +70,8 @@ std::vector<Keypoint> detect_keypoints(const Image& img,
 void draw_keypoints(Image& img,
                     const std::vector<Keypoint>& keypoints,
                     float scales_count);
+
+std::vector<KeypointMatch> match_keypoints(
+    const std::vector<Keypoint>& keypoints1, const std::vector<std::vector<float>>& descriptors1,
+    const std::vector<Keypoint>& keypoints2, const std::vector<std::vector<float>>& descriptors2,
+    float ratio_threshold = 0.75f);
