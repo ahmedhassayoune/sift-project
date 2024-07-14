@@ -3,19 +3,25 @@
 #include "image.hh"
 
 #define MAX_CONVERGENCE_STEPS 5
-#define CONVERGENCE_THRESHOLD 0.5f
+#define CONVERGENCE_THR 0.5f
+#define ORI_SMOOTH_ITERATIONS 2
+#define DESC_HIST_WIDTH 4
+#define DESC_HIST_BINS 8
+#define DESC_MAGNITUDE_THR 0.2f
+#define INT_DESCR_FCTR 512.0f
 
 struct Keypoint {
-    int x;               // x-coordinate in input image
-    int y;               // y-coordinate in input image
-    int octave;          // octave layer index
-    float sigma;         // gaussian blur sigma
-    int scale_idx;       // scale index in octave
-    float porientation;  // principal orientation in degrees (0-360)
+    float x;     // continuous x-coordinate in input image
+    float y;     // continuous y-coordinate in input image
+    int octave;  // octave index
+    int layer;   // layer index within the octave
+    float size;  // size of the keypoint
+    float pori;  // principal orientation in radians [0, 2*pi]
+
+    uint8_t desc[128];  // 128-byte descriptor
 
     bool operator==(const Keypoint& kp) const {
-        return x == kp.x && y == kp.y && octave == kp.octave &&
-               sigma == kp.sigma && porientation == kp.porientation;
+        return x == kp.x && y == kp.y && size == kp.size && pori == kp.pori;
     }
 
     bool operator!=(const Keypoint& kp) const { return !(*this == kp); }
@@ -25,10 +31,10 @@ struct Keypoint {
             return x < kp.x;
         if (y != kp.y)
             return y < kp.y;
-        if (sigma != kp.sigma)
-            return sigma > kp.sigma;
-        if (porientation != kp.porientation)
-            return porientation < kp.porientation;
+        if (size != kp.size)
+            return size > kp.size;
+        if (pori != kp.pori)
+            return pori < kp.pori;
         return octave > kp.octave;
     }
 
@@ -38,18 +44,18 @@ struct Keypoint {
 
     friend std::ostream& operator<<(std::ostream& os, const Keypoint& kp) {
         os << "Keypoint: x=" << kp.x << ", y=" << kp.y
-           << ", octave=" << kp.octave << ", sigma=" << kp.sigma
-           << ", scale_idx=" << kp.scale_idx
-           << ", porientation=" << kp.porientation;
+           << ", octave=" << kp.octave << ", size=" << kp.size
+           << ", layer=" << kp.layer << ", porientation=" << kp.pori;
         return os;
     }
 };
 
-std::vector<Keypoint> detect_keypoints(
+std::vector<Keypoint> detect_keypoints_and_descriptors(
     const Image& img, const float init_sigma = 1.6f, const int intervals = 3,
     const int window_size = 3, const float contrast_threshold = 0.04f,
     const float eigen_ratio = 10.0f, const float num_bins = 36,
-    const float peak_ratio = 0.8f, const float scale_factor = 1.5f);
+    const float peak_ratio = 0.8f, const float ori_sigma_factor = 1.5f,
+    const float desc_scale_factor = 3.0f);
 
 void draw_keypoints(Image& img, const std::vector<Keypoint>& keypoints,
                     float scales_count);

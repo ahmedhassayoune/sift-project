@@ -5,6 +5,9 @@
 #include <tuple>
 
 namespace {
+const float rad_to_deg = 180.0f / M_PI;
+const float deg_to_rad = M_PI / 180.0f;
+
 using Vector = std::array<float, 3>;
 using Matrix = std::array<std::array<float, 3>, 3>;
 using PixelCube = std::array<std::array<std::array<float, 3>, 3>, 3>;
@@ -335,8 +338,8 @@ std::vector<Extrema> detect_extrema(const DogPyramid& dog_images,
 /// @return The keypoints
 std::vector<Keypoint> compute_keypoints(
     const DogPyramid& dog_images, const std::vector<Extrema>& extrema,
-    const std::vector<float>& gaussian_kernels, const int window_size,
-    const int intervals, const float contrast_threshold,
+    const std::vector<float>& gaussian_kernels, const float init_sigma,
+    const int window_size, const int intervals, const float contrast_threshold,
     const float eigen_ratio) {
     std::vector<Keypoint> keypoints;
     const int width = dog_images[0][0].width;
@@ -350,34 +353,35 @@ std::vector<Keypoint> compute_keypoints(
             std::cout << "Computed keypoints " << count << "/" << extrema.size()
                       << "..." << std::endl;
         }
-        auto [x, y, scale_idx, octave] = e;
+        float x = std::get<0>(e);
+        float y = std::get<1>(e);
+        int layer = std::get<2>(e);
+        int octave = std::get<3>(e);
 
+        Vector offset;
         auto dog_octave = dog_images[octave];
         int step;
         for (step = 0; step < MAX_CONVERGENCE_STEPS; ++step) {
-            PixelCube pixel_cube = get_pixel_cube(dog_octave, x, y, scale_idx);
+            PixelCube pixel_cube = get_pixel_cube(dog_octave, x, y, layer);
             Vector gradient = compute_gradient(pixel_cube);
             Matrix hessian = compute_hessian(pixel_cube);
-            Vector offset = fit_quadratic(gradient, hessian);
+            offset = fit_quadratic(gradient, hessian);
 
             float max_offset =
                 std::max(std::abs(offset[0]),
                          std::max(std::abs(offset[1]), std::abs(offset[2])));
 
-            scale_idx += std::round(offset[0]);
-            x += std::round(offset[1]);
-            y += std::round(offset[2]);
-
-            if (max_offset < CONVERGENCE_THRESHOLD)  // Converged
+            if (max_offset < CONVERGENCE_THR)  // Converged
             {
                 // Step 1: Check contrast threshold of new extremum value
                 float dot_gradient_offset = gradient[0] * offset[0] +
                                             gradient[1] * offset[1] +
                                             gradient[2] * offset[2];
 
-                bool valid_contrast =
-                    (std::abs(pixel_cube[1][1][1] + 0.5 * dot_gradient_offset) *
-                     intervals) >= contrast_threshold;
+                float interpolated_value =
+                    pixel_cube[1][1][1] + 0.5 * dot_gradient_offset;
+                bool valid_contrast = (std::abs(interpolated_value) *
+                                       intervals) >= contrast_threshold;
 
                 if (!valid_contrast) {
                     step = MAX_CONVERGENCE_STEPS;
@@ -385,24 +389,33 @@ std::vector<Keypoint> compute_keypoints(
                 }
 
                 // Step 2: Check if the extremum is not on the edge
-                float xy_hessian_trace = hessian[1][1] + hessian[2][2];
-                float xy_hessian_det = hessian[1][1] * hessian[2][2] -
-                                       hessian[1][2] * hessian[1][2];
+                float xy_h_tr = hessian[1][1] + hessian[2][2];
+                float xy_h_det = hessian[1][1] * hessian[2][2] -
+                                 hessian[1][2] * hessian[1][2];
+
+                if (xy_h_tr <= 0) {
+                    step = MAX_CONVERGENCE_STEPS;
+                    break;
+                }
 
                 bool valid_edge =
-                    (std::pow(xy_hessian_trace, 2) * eigen_ratio) <
-                    (std::pow(eigen_ratio + 1, 2) * xy_hessian_det);
+                    (xy_h_tr * xy_h_tr * eigen_ratio) <
+                    ((eigen_ratio + 1) * (eigen_ratio + 1) * xy_h_det);
 
-                if (xy_hessian_det <= 0 || !valid_edge) {
+                if (!valid_edge) {
                     step = MAX_CONVERGENCE_STEPS;
                 }
 
                 break;
             }
 
+            layer += std::round(offset[0]);
+            x += std::round(offset[1]);
+            y += std::round(offset[2]);
+
             if (x < border || x >= (width - border) || y < border ||
-                y >= (height - border) || scale_idx < border ||
-                scale_idx >= (depth - border)) {
+                y >= (height - border) || layer < border ||
+                layer >= (depth - border)) {
                 step = MAX_CONVERGENCE_STEPS;
                 break;
             }
@@ -415,12 +428,17 @@ std::vector<Keypoint> compute_keypoints(
         }
 
         Keypoint kp;
-        kp.x = std::pow(2, octave) * x;  // Scale back x to initial image size
-        kp.y = std::pow(2, octave) * y;  // Scale back y to initial image size
-        kp.sigma = compute_sigma(gaussian_kernels, scale_idx);
-        kp.scale_idx = scale_idx;
         kp.octave = octave;
-        kp.porientation = 0.0f;
+        kp.layer = layer;
+        kp.x = std::pow(2, octave) *
+               (x + offset[1]);  // Scale back x to initial image size
+        kp.y = std::pow(2, octave) *
+               (y + offset[2]);  // Scale back y to initial image size
+        kp.size = init_sigma *
+                  std::pow(2, octave + (static_cast<float>(layer) + offset[0]) /
+                                           intervals);
+        kp.pori = 0.0f;
+
         keypoints.push_back(kp);
         count++;
     }
@@ -433,31 +451,33 @@ std::vector<Keypoint> compute_keypoints(
 /// @param gaussian_images Gaussian images for each octave
 /// @param num_bins Number of bins for the orientation histogram
 /// @param peak_ratio Peak ratio threshold for orientation histogram
-/// @param scale_factor Scale factor (SIFT algorithm uses 1.5f)
+/// @param ori_sigma_factor Orientation sigma factor
 /// @return The oriented keypoints
 std::vector<Keypoint> compute_orientations(
     const std::vector<Keypoint>& keypoints,
     const std::vector<float>& gaussian_kernels,
     const GaussianPyramid& gaussian_images, const int num_bins,
-    const float peak_ratio, const float scale_factor) {
-    std::vector<Keypoint> oriented_keypoints;
-
+    const float peak_ratio, const float ori_sigma_factor) {
+    std::vector<Keypoint> ori_keypoints;
     for (const Keypoint& kp : keypoints) {
         int octave = kp.octave;
         int x = std::round(kp.x /
                            std::pow(2, octave));  // Scale back x to octave size
         int y = std::round(kp.y /
                            std::pow(2, octave));  // Scale back y to octave size
-        int width = gaussian_images[octave][0].width;
-        int height = gaussian_images[octave][0].height;
+        float size =
+            kp.size / std::pow(2, octave);  // Scale back size to octave size
 
-        float scale = kp.sigma * scale_factor;
+        float scale = ori_sigma_factor * size;
         int radius = std::round(
             3 * scale);  // 3-sigma to cover 99.7% of the distribution
-        std::vector<float> hist(num_bins, 0.0f);
-        Image img = gaussian_images[octave][kp.scale_idx];
+        float exp_denom = 2 * scale * scale;
+        Image img = gaussian_images[octave][kp.layer];
+        int width = img.width;
+        int height = img.height;
 
         // Step 1: Compute the orientation histogram
+        std::vector<float> hist(num_bins, 0.0f);
         for (int i = -radius; i <= radius; ++i) {
             if (x + i - 1 < 0 || x + i + 1 >= width) {
                 continue;
@@ -474,70 +494,215 @@ std::vector<Keypoint> compute_orientations(
                            img(x + i, y + j + 1, Channel::GRAY);
 
                 float magnitude = std::sqrt(dx * dx + dy * dy);
-                float orientation =
-                    std::fmod(std::atan2(dy, dx) + 2 * M_PI, 2 * M_PI) *
-                    180.0f / M_PI;
-                float weight = std::exp(-(i * i + j * j) / (2 * scale * scale));
-                int h_idx = std::fmod(
-                    std::round(orientation * num_bins / 360.0f), num_bins);
+                float angle = std::atan2(dy, dx);
+                float weight = std::exp(-(i * i + j * j) / exp_denom);
+
+                int h_idx = std::round(num_bins * (angle + M_PI) / 2 * M_PI);
+                h_idx = (h_idx < num_bins) ? h_idx : 0;
                 hist[h_idx] += weight * magnitude;
             }
         }
 
-        // Step 2: Smooth the histogram
-        std::vector<float> smoothed_hist(num_bins, 0.0f);
-        for (int i = 0; i < num_bins; ++i) {
-            smoothed_hist[i] = 0.375 * hist[i] +
-                               0.25 * (hist[(i - 1 + num_bins) % num_bins] +
-                                       hist[(i + 1) % num_bins]) +
-                               0.0625 * (hist[(i - 2 + num_bins) % num_bins] +
-                                         hist[(i + 2) % num_bins]);
+        // Step 2: Smooth histogram
+        for (int iter = 0; iter < ORI_SMOOTH_ITERATIONS; ++iter) {
+            for (int i = 0; i < num_bins; ++i) {
+                float h0 = hist[(i - 1 + num_bins) % num_bins];
+                float h1 = hist[i];
+                float h2 = hist[(i + 1) % num_bins];
+
+                hist[i] = 0.25f * h0 + 0.5f * h1 + 0.25f * h2;
+            }
         }
 
         // Step 3: Find the peak orientations and fit a parabola for interpolation
-        float max_peak =
-            *std::max_element(smoothed_hist.begin(), smoothed_hist.end());
+        float max_peak = *std::max_element(hist.begin(), hist.end());
         for (int i = 0; i < num_bins; ++i) {
-            float h0 = smoothed_hist[(i - 1 + num_bins) % num_bins];
-            float h1 = smoothed_hist[i];
-            float h2 = smoothed_hist[(i + 1) % num_bins];
+            float h0 = hist[(i - 1 + num_bins) % num_bins];
+            float h1 = hist[i];
+            float h2 = hist[(i + 1) % num_bins];
 
-            if (h1 > (peak_ratio * max_peak) && h1 > h0 && h1 > h2) {
+            if (h1 > h0 && h1 > h2 && h1 > (peak_ratio * max_peak)) {
                 float interpolated_i =
                     i + 0.5f * (h0 - h2) / (h0 - 2 * h1 + h2);
                 interpolated_i = std::fmod(interpolated_i + num_bins, num_bins);
-                float orientation = 360.0f - interpolated_i * 360.0f / num_bins;
-                if (std::abs(orientation - 360.0f) < 1e-7) {
-                    orientation = 0.0f;
-                }
+                float ori = 2 * M_PI * interpolated_i / num_bins;
+                ori = std::fmod(ori + 2 * M_PI, 2 * M_PI);
 
-                Keypoint oriented_kp = kp;
-                oriented_kp.porientation = orientation;
-                oriented_kp.x /= 2;  // Scale back x to input image size
-                oriented_kp.y /= 2;  // Scale back y to input image size
-                oriented_keypoints.push_back(oriented_kp);
+                Keypoint ori_kp = kp;
+                ori_kp.pori = ori;
+                ori_kp.x /= 2;     // Scale back x to input image size
+                ori_kp.y /= 2;     // Scale back y to input image size
+                ori_kp.size /= 2;  // Scale back size to input image size
+                ori_keypoints.push_back(ori_kp);
             }
         }
     }
 
-    return oriented_keypoints;
+    return ori_keypoints;
 }
 
+/// @brief Update the histogram with the magnitude
+/// @param histograms Histograms
+/// @param row_bin Row bin
+/// @param col_bin Column bin
+/// @param ori_bin Orientation bin
+/// @param magnitude Magnitude
+void update_histogram(
+    float histograms[DESC_HIST_WIDTH][DESC_HIST_WIDTH][DESC_HIST_BINS],
+    float row_bin, float col_bin, float ori_bin, float magnitude) {
+    float delta_r, delta_c, delta_o, val_r, val_c, val_o;
+    int base_r, base_c, base_o, r_idx, c_idx, o_idx, r, c, o;
+
+    base_r = std::floor(row_bin);
+    base_c = std::floor(col_bin);
+    base_o = std::floor(ori_bin);
+    delta_r = row_bin - base_r;
+    delta_c = col_bin - base_c;
+    delta_o = ori_bin - base_o;
+
+    for (r = 0; r <= 1; r++) {
+        r_idx = base_r + r;
+        if (r_idx >= 0 && r_idx < DESC_HIST_WIDTH) {
+            val_r = magnitude * ((r == 0) ? 1.0 - delta_r : delta_r);
+            for (c = 0; c <= 1; c++) {
+                c_idx = base_c + c;
+                if (c_idx >= 0 && c_idx < DESC_HIST_WIDTH) {
+                    val_c = val_r * ((c == 0) ? 1.0 - delta_c : delta_c);
+                    for (o = 0; o <= 1; o++) {
+                        o_idx = (base_o + o) % DESC_HIST_BINS;
+                        val_o = val_c * ((o == 0) ? 1.0 - delta_o : delta_o);
+                        histograms[r_idx][c_idx][o_idx] += val_o;
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// @brief Convert the histogram to a descriptor
+/// @param histograms Histograms
+/// @param kp Keypoint
+void convert_hist_to_desc(
+    float histograms[DESC_HIST_WIDTH][DESC_HIST_WIDTH][DESC_HIST_BINS],
+    Keypoint& kp) {
+    int size = DESC_HIST_WIDTH * DESC_HIST_WIDTH * DESC_HIST_BINS;
+    float* hists = reinterpret_cast<float*>(histograms);
+
+    float norm = 0.0f;
+    for (int i = 0; i < size; i++) {
+        norm += hists[i] * hists[i];
+    }
+    norm = std::sqrt(norm);
+    float norm_inv = 1.0f / norm;
+
+    norm = 0.0f;
+    for (int i = 0; i < size; i++) {
+        hists[i] *= norm_inv;
+        if (hists[i] > DESC_MAGNITUDE_THR)
+            hists[i] = DESC_MAGNITUDE_THR;
+        norm += hists[i] * hists[i];
+    }
+    norm = std::sqrt(norm);
+    norm_inv = 1.0f / norm;
+
+    for (int i = 0; i < size; i++) {
+        int val = (int)std::floor(INT_DESCR_FCTR * hists[i] * norm_inv);
+        kp.desc[i] = std::min(val, 255);
+    }
+}
+
+/// @brief Compute the descriptors for the keypoints
+/// @param keypoints List of keypoints
+/// @param gaussian_pyramid Gaussian pyramid
+/// @param scale_factor Scale factor for the descriptor
+void compute_descriptors(std::vector<Keypoint>& keypoints,
+                         const GaussianPyramid& gaussian_pyramid,
+                         float scale_factor) {
+    std::vector<std::vector<float>> descriptors;
+
+    for (auto& kp : keypoints) {
+        const Image img = gaussian_pyramid[kp.octave][kp.layer];
+        int width = img.width;
+        int height = img.height;
+        int x = kp.x / std::pow(2, kp.octave - 1);
+        int y = kp.y / std::pow(2, kp.octave - 1);
+
+        float bins_per_rad = DESC_HIST_BINS / (2 * M_PI);
+        float cos_angle = std::cos(kp.pori);
+        float sin_angle = std::sin(kp.pori);
+
+        float histograms[DESC_HIST_WIDTH][DESC_HIST_WIDTH][DESC_HIST_BINS] = {
+            0};
+
+        float hist_width = scale_factor * kp.size / std::pow(2, kp.octave - 1);
+        float exp_denom = 0.5f * DESC_HIST_WIDTH * DESC_HIST_WIDTH;
+        double tmp_radius = std::round(hist_width * 0.5f * std::sqrt(2.0f) *
+                                           (DESC_HIST_WIDTH + 1.0) +
+                                       0.5f);
+        int radius =
+            std::min(tmp_radius, std::sqrt(width * width + height * height));
+
+        for (int row = -radius; row <= radius; ++row) {
+            for (int col = -radius; col <= radius; ++col) {
+                float row_rot =
+                    (col * sin_angle + row * cos_angle) / hist_width;
+                float col_rot =
+                    (col * cos_angle - row * sin_angle) / hist_width;
+
+                float row_bin = row_rot + DESC_HIST_WIDTH / 2 - 0.5f;
+                float col_bin = col_rot + DESC_HIST_WIDTH / 2 - 0.5f;
+
+                if (row_bin > -1.0f && row_bin < DESC_HIST_WIDTH &&
+                    col_bin > -1.0f && col_bin < DESC_HIST_WIDTH) {
+                    int new_y = row + y;
+                    int new_x = col + x;
+                    if (new_x > 0 && new_x < (width - 1) && new_y > 0 &&
+                        new_y < (height - 1)) {
+                        float dx = img(new_x + 1, new_y, Channel::GRAY) -
+                                   img(new_x - 1, new_y, Channel::GRAY);
+                        float dy = img(new_x, new_y - 1, Channel::GRAY) -
+                                   img(new_x, new_y + 1, Channel::GRAY);
+
+                        float magnitude = std::sqrt(dx * dx + dy * dy);
+                        float angle = std::atan2(dy, dx);
+
+                        angle -= kp.pori;
+                        angle = std::fmod(std::fmod(angle, 2 * M_PI) + 2 * M_PI,
+                                          2 * M_PI);
+
+                        float ori_bin = angle * bins_per_rad;
+                        float weight =
+                            std::exp(-(row_rot * row_rot + col_rot * col_rot) /
+                                     exp_denom);
+                        update_histogram(histograms, row_bin, col_bin, ori_bin,
+                                         magnitude * weight);
+                    }
+                }
+            }
+        }
+
+        convert_hist_to_desc(histograms, kp);
+    }
+}
 }  // anonymous namespace
 
-/// @brief Detect stable keypoints in an image based on the SIFT algorithm
+/// @brief Detect keypoints and compute descriptors for an image
 /// @param img Input image
-/// @param init_sigma Initial sigma value (Defaults to 1.6)
-/// @param intervals Number of intervals (Defaults to 3)
-/// @param window_size Size of the 3D window to search for extrema (Defaults to 3)
-/// @param contrast_threshold Threshold value for detecting extrema (Defaults to 0.04f)
-/// @param eigen_ratio Eigen ratio threshold for edge detection (Defaults to 10.0f)
-/// @return The stable keypoints
-std::vector<Keypoint> detect_keypoints(
+/// @param init_sigma Initial sigma value
+/// @param intervals Number of intervals for each octave
+/// @param window_size Size of the 3D window to search for extrema
+/// @param contrast_threshold Threshold value for detecting extrema
+/// @param eigen_ratio Eigen ratio threshold for edge detection
+/// @param num_bins Number of bins for the orientation histogram
+/// @param peak_ratio Peak ratio threshold for orientation histogram
+/// @param ori_sigma_factor Sigma factor for orientation histogram
+/// @param desc_scale_factor Scale factor for the descriptor
+/// @return The keypoints and descriptors
+std::vector<Keypoint> detect_keypoints_and_descriptors(
     const Image& img, const float init_sigma, const int intervals,
     const int window_size, const float contrast_threshold,
     const float eigen_ratio, const float num_bins, const float peak_ratio,
-    const float scale_factor) {
+    const float ori_sigma_factor, const float desc_scale_factor) {
     Image initial_image = compute_initial_image(img, init_sigma);
     std::cout << "Initial image computed: " << initial_image.width << "x"
               << initial_image.height << std::endl;
@@ -569,15 +734,15 @@ std::vector<Keypoint> detect_keypoints(
     std::cout << "Extrema points detected: " << extrema.size() << std::endl;
 
     std::cout << "Computing keypoints..." << std::endl;
-    auto keypoints =
-        compute_keypoints(dog_images, extrema, gaussian_kernels, window_size,
-                          intervals, contrast_threshold, eigen_ratio);
+    auto keypoints = compute_keypoints(dog_images, extrema, gaussian_kernels,
+                                       init_sigma, window_size, intervals,
+                                       contrast_threshold, eigen_ratio);
     std::cout << "Raw keypoints computed: " << keypoints.size() << std::endl;
 
     std::cout << "Computing orientations..." << std::endl;
     keypoints =
         compute_orientations(keypoints, gaussian_kernels, gaussian_images,
-                             num_bins, peak_ratio, scale_factor);
+                             num_bins, peak_ratio, ori_sigma_factor);
     std::cout << "Oriented keypoints computed: " << keypoints.size()
               << std::endl;
 
@@ -589,6 +754,10 @@ std::vector<Keypoint> detect_keypoints(
     Image keypoints_image(img);
     draw_keypoints(keypoints_image, keypoints, gaussian_kernels.size());
     keypoints_image.save("keypoints.png");
+
+    std::cout << "Computing descriptors..." << std::endl;
+    compute_descriptors(keypoints, gaussian_images, desc_scale_factor);
+    std::cout << "Descriptors computed!" << std::endl;
 
     return keypoints;
 }
@@ -605,284 +774,15 @@ void draw_keypoints(Image& img, const std::vector<Keypoint>& keypoints,
     for (const Keypoint& kp : keypoints) {
         int centerX = kp.x;
         int centerY = kp.y;
-        float angle = kp.porientation;
-        int radius = min_radius * std::exp(kp.scale_idx / (scales_count - 1) *
+        float angle = kp.pori;
+        int radius = min_radius * std::exp(kp.layer / (scales_count - 1) *
                                            std::log(max_radius / min_radius));
-        int color = colors[kp.scale_idx % colors.size()];
+        int color = colors[kp.layer % colors.size()];
 
         img.draw_circle(centerX, centerY, radius, color);
 
-        int x2 = centerX + radius * std::cos(angle * M_PI / 180.0f);
-        int y2 = centerY + radius * std::sin(angle * M_PI / 180.0f);
+        int x2 = centerX + radius * std::cos(angle);
+        int y2 = centerY + radius * std::sin(angle);
         img.draw_line(centerX, centerY, x2, y2, color);
     }
-}
-
-float calculate_bin(float rot, float hist_width) {
-    if (hist_width != 0 && !std::isnan(rot) && !std::isnan(hist_width)) {
-        return ((rot) / (hist_width)) + 0.5f * 4 - 0.5f;
-    } else {
-        std::cerr << "Invalid hist_width or rot value in calculate_bin"
-                  << std::endl;
-        return 0.0f;
-    }
-}
-
-static void computeBinsAndMagnitudes(const Image& gaussian_image, float row_rot,
-                                     float col_rot, float hist_width,
-                                     float sin_angle, float cos_angle,
-                                     float& row_bin, float& col_bin,
-                                     float& magnitude, float& orientation) {
-
-    float weight_multiplier = -0.5f / ((0.5f * 4) * (0.5f * 4));
-    float dx, dy;
-
-    calculateGradients(gaussian_image, static_cast<int>(col_rot),
-                       static_cast<int>(row_rot), dx, dy);
-    magnitude = std::sqrt(dx * dx + dy * dy);
-
-    if (std::isnan(magnitude)) {
-        std::cerr << "NaN detected in magnitude calculation" << std::endl;
-        row_bin = col_bin = orientation = 0;
-        return;
-    }
-
-    orientation = std::atan2(dy, dx) * 180.0f / M_PI;
-    if (orientation < 0) {
-        orientation += 360.0f;
-    }
-
-    if (std::isnan(row_rot) || std::isnan(col_rot) || std::isnan(hist_width)) {
-        std::cerr << "Invalid row_rot, col_rot, or hist_width value before bin "
-                     "calculation"
-                  << std::endl;
-        row_bin = col_bin = orientation = 0;
-        return;
-    }
-
-    row_bin = calculate_bin(row_rot, hist_width);
-    col_bin = calculate_bin(col_rot, hist_width);
-
-    if (std::isnan(row_bin) || std::isnan(col_bin)) {
-        std::cerr << "NaN detected in bin calculation" << std::endl;
-        row_bin = col_bin = orientation = 0;
-        return;
-    }
-
-    float weight = std::exp(weight_multiplier *
-                            ((row_rot / hist_width) * (row_rot / hist_width) +
-                             (col_rot / hist_width) * (col_rot / hist_width)));
-
-    if (std::isnan(weight)) {
-        std::cerr << "NaN detected in weight calculation" << std::endl;
-    }
-    if (std::isnan(magnitude)) {
-        std::cerr << "NaN detected before weight multiplication" << std::endl;
-    }
-
-    magnitude *= weight;
-
-    if (std::isnan(magnitude)) {
-        std::cerr << "NaN detected after weight multiplication" << std::endl;
-        row_bin = col_bin = orientation = 0;
-    }
-}
-
-static void trilinearInterpolation(
-    const std::vector<float>& row_bin_list,
-    const std::vector<float>& col_bin_list,
-    const std::vector<float>& magnitude_list,
-    const std::vector<float>& orientation_bin_list,
-    std::vector<std::vector<std::vector<float>>>& histogram_tensor,
-    int num_bins) {
-    std::cout << " Interpolation ... " << std::endl;
-
-    for (size_t i = 0; i < row_bin_list.size(); ++i) {
-        int row_bin_floor = static_cast<int>(std::floor(row_bin_list[i]));
-        int col_bin_floor = static_cast<int>(std::floor(col_bin_list[i]));
-        int orientation_bin_floor =
-            static_cast<int>(std::floor(orientation_bin_list[i]));
-        float row_fraction = row_bin_list[i] - row_bin_floor;
-        float col_fraction = col_bin_list[i] - col_bin_floor;
-        float orientation_fraction =
-            orientation_bin_list[i] - orientation_bin_floor;
-
-        if (orientation_bin_floor < 0)
-            orientation_bin_floor += num_bins;
-        if (orientation_bin_floor >= num_bins)
-            orientation_bin_floor -= num_bins;
-
-        float c1 = magnitude_list[i] * row_fraction;
-        float c0 = magnitude_list[i] * (1 - row_fraction);
-        float c11 = c1 * col_fraction;
-        float c10 = c1 * (1 - col_fraction);
-        float c01 = c0 * col_fraction;
-        float c00 = c0 * (1 - col_fraction);
-        float c111 = c11 * orientation_fraction;
-        float c110 = c11 * (1 - orientation_fraction);
-        float c101 = c10 * orientation_fraction;
-        float c100 = c10 * (1 - orientation_fraction);
-        float c011 = c01 * orientation_fraction;
-        float c010 = c01 * (1 - orientation_fraction);
-        float c001 = c00 * orientation_fraction;
-        float c000 = c00 * (1 - orientation_fraction);
-
-        histogram_tensor[row_bin_floor + 1][col_bin_floor + 1]
-                        [orientation_bin_floor] += c000;
-        histogram_tensor[row_bin_floor + 1][col_bin_floor + 1]
-                        [(orientation_bin_floor + 1) % num_bins] += c001;
-        histogram_tensor[row_bin_floor + 1][col_bin_floor + 2]
-                        [orientation_bin_floor] += c010;
-        histogram_tensor[row_bin_floor + 1][col_bin_floor + 2]
-                        [(orientation_bin_floor + 1) % num_bins] += c011;
-        histogram_tensor[row_bin_floor + 2][col_bin_floor + 1]
-                        [orientation_bin_floor] += c100;
-        histogram_tensor[row_bin_floor + 2][col_bin_floor + 1]
-                        [(orientation_bin_floor + 1) % num_bins] += c101;
-        histogram_tensor[row_bin_floor + 2][col_bin_floor + 2]
-                        [orientation_bin_floor] += c110;
-        histogram_tensor[row_bin_floor + 2][col_bin_floor + 2]
-                        [(orientation_bin_floor + 1) % num_bins] += c111;
-    }
-}
-
-static std::vector<float> normalizeAndConvertDescriptor(
-    std::vector<std::vector<std::vector<float>>>& histogram_tensor,
-    int window_width, int num_bins, float descriptor_max_value) {
-    std::cout << " Normalisation ... " << std::endl;
-    std::vector<float> descriptor_vector;
-    for (int i = 1; i < window_width + 1; ++i) {
-        for (int j = 1; j < window_width + 1; ++j) {
-            for (int k = 0; k < num_bins; ++k) {
-                descriptor_vector.push_back(histogram_tensor[i][j][k]);
-            }
-        }
-    }
-
-    float norm = std::sqrt(std::inner_product(descriptor_vector.begin(),
-                                              descriptor_vector.end(),
-                                              descriptor_vector.begin(), 0.0f));
-    if (norm > 0) {
-        for (float& value : descriptor_vector) {
-            value = std::min(value / norm, descriptor_max_value);
-        }
-    }
-
-    norm = std::sqrt(std::inner_product(descriptor_vector.begin(),
-                                        descriptor_vector.end(),
-                                        descriptor_vector.begin(), 0.0f));
-    for (float& value : descriptor_vector) {
-        value /= norm;
-    }
-
-    return descriptor_vector;
-}
-
-/*
-    Etapes du papier:
-        -	Décomposer l’octave, la couche et l’échelle d’un keypoint (ok)
-        -   Calculer les gradients. (ok)
-        -   Calculer les bins et les magnitudes des gradients. (ok)
-        -   Interpolation trilineaire (pour le lissage de l'histo). (ok)
-        -   Normalisation et conversion des descripteurs. (ok)
-        -   Tout regrouper (ok)
-
-*/
-
-std::vector<std::vector<float>> generateDescriptors(
-    const std::vector<Keypoint>& keypoints,
-    const ScaleSpacePyramid& gaussian_pyramid, int window_width, int num_bins,
-    float scale_multiplier, float descriptor_max_value) {
-    std::cout << " Start generate Descriptors ... " << std::endl;
-
-    std::vector<std::vector<float>> descriptors;
-
-    for (const auto& keypoint : keypoints) {
-        auto [octave, layer, scale] = unpackOctave(keypoint);
-        std::cout << "octave : " << octave << std::endl;
-        std::cout << "size octaves: " << gaussian_pyramid.octaves.size()
-                  << std::endl;
-
-        // Vérification des indices valides
-        if (octave + 1 < 0 || octave + 1 >= gaussian_pyramid.octaves.size() ||
-            layer < 0 || layer >= gaussian_pyramid.octaves[octave + 1].size()) {
-            std::cerr << "Invalid octave or layer index." << std::endl;
-            continue;
-        }
-
-        std::cout << gaussian_pyramid.octaves[octave + 1][layer].width
-                  << std::endl;
-        std::cout << gaussian_pyramid.octaves[octave + 1][layer].height
-                  << std::endl;
-        const Image gaussian_image =
-            gaussian_pyramid.octaves[octave + 1][layer];
-        int num_rows = gaussian_image.height;
-        int num_cols = gaussian_image.width;
-        std::vector<int> point = {
-            static_cast<int>(std::round(scale * keypoint.x)),
-            static_cast<int>(std::round(scale * keypoint.y))};
-
-        float bins_per_degree = num_bins / 360.0f;
-        float angle = 360.0f - keypoint.angle;
-        float cos_angle = std::cos(angle * M_PI / 180.0f);
-        float sin_angle = std::sin(angle * M_PI / 180.0f);
-
-        std::vector<float> row_bin_list, col_bin_list, magnitude_list,
-            orientation_bin_list;
-        std::vector<std::vector<std::vector<float>>> histogram_tensor(
-            window_width + 2,
-            std::vector<std::vector<float>>(
-                window_width + 2, std::vector<float>(num_bins, 0.0f)));
-
-        float hist_width = scale_multiplier * 0.5f * scale * keypoint.size;
-        int half_width =
-            std::min(static_cast<int>(std::round(hist_width * std::sqrt(2.0f) *
-                                                 (window_width + 1) * 0.5f)),
-                     static_cast<int>(
-                         std::sqrt(num_rows * num_rows + num_cols * num_cols)));
-
-        for (int row = -half_width; row <= half_width; ++row) {
-            for (int col = -half_width; col <= half_width; ++col) {
-                float row_rot = col * sin_angle + row * cos_angle;
-                float col_rot = col * cos_angle - row * sin_angle;
-                float row_bin, col_bin, magnitude, orientation;
-
-                computeBinsAndMagnitudes(
-                    gaussian_image, row_rot, col_rot, hist_width, sin_angle,
-                    cos_angle, row_bin, col_bin, magnitude, orientation);
-
-                if (row_bin > -1 && row_bin < window_width && col_bin > -1 &&
-                    col_bin < window_width) {
-                    int window_row =
-                        static_cast<int>(std::round(point[1] + row));
-                    int window_col =
-                        static_cast<int>(std::round(point[0] + col));
-                    if (window_row > 0 && window_row < num_rows - 1 &&
-                        window_col > 0 && window_col < num_cols - 1) {
-                        row_bin_list.push_back(row_bin);
-                        col_bin_list.push_back(col_bin);
-                        magnitude_list.push_back(magnitude);
-                        orientation_bin_list.push_back((orientation - angle) *
-                                                       bins_per_degree);
-                    }
-                }
-            }
-        }
-
-        trilinearInterpolation(row_bin_list, col_bin_list, magnitude_list,
-                               orientation_bin_list, histogram_tensor,
-                               num_bins);
-
-        std::vector<float> descriptor_vector = normalizeAndConvertDescriptor(
-            histogram_tensor, window_width, num_bins, descriptor_max_value);
-        bool has_nan =
-            std::any_of(descriptor_vector.begin(), descriptor_vector.end(),
-                        [](float value) { return std::isnan(value); });
-        if (has_nan) {
-            std::cerr << "NaN detected in descriptor_vector" << std::endl;
-        }
-        descriptors.push_back(descriptor_vector);
-    }
-
-    return descriptors;
 }
