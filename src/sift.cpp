@@ -673,6 +673,20 @@ void compute_descriptors(std::vector<Keypoint>& keypoints,
         convert_hist_to_desc(histograms, kp);
     }
 }
+
+/// @brief Euclidian distance between two descriptors
+/// @param desc1 First descriptor
+/// @param desc2 Second descriptor
+/// @return The distance
+float euclid_dist(const uint8_t desc1[128], const uint8_t desc2[128]) {
+    float sum = 0.0f;
+    for (size_t i = 0; i < 128; i++) {
+        int diff = static_cast<int>(desc1[i]) - static_cast<int>(desc2[i]);
+        sum += diff * diff;
+    }
+    return std::sqrt(sum);
+}
+
 }  // anonymous namespace
 
 /// @brief Detect keypoints and compute descriptors for an image
@@ -751,6 +765,49 @@ std::vector<Keypoint> detect_keypoints_and_descriptors(
     return keypoints;
 }
 
+/// @brief Match keypoints between two images based on euclidian distance
+/// @param keypoints1 First set of keypoints
+/// @param keypoints2 Second set of keypoints
+/// @param ratio_threshold Ratio threshold for matching
+/// @return The matched keypoints
+std::vector<KeypointMatch> match_keypoints(
+    const std::vector<Keypoint>& keypoints1,
+    const std::vector<Keypoint>& keypoints2, float ratio_threshold) {
+
+    std::vector<KeypointMatch> matches;
+
+    for (size_t i = 0; i < keypoints1.size(); i++) {
+        const auto& desc1 = keypoints1[i].desc;
+        float best_distance = std::numeric_limits<float>::max();
+        float second_best_distance = std::numeric_limits<float>::max();
+        size_t best_index = 0;
+
+        for (size_t j = 0; j < keypoints2.size(); j++) {
+            const auto& desc2 = keypoints2[j].desc;
+            float distance = euclid_dist(desc1, desc2);
+
+            if (distance < best_distance) {
+                second_best_distance = best_distance;
+                best_distance = distance;
+                best_index = j;
+            } else if (distance < second_best_distance) {
+                second_best_distance = distance;
+            }
+        }
+
+        if (best_distance < (ratio_threshold * second_best_distance)) {
+            matches.emplace_back(keypoints1[i], keypoints2[best_index],
+                                 best_distance);
+        }
+    }
+
+    return matches;
+}
+
+/// @brief Draw the keypoints on an image
+/// @param img Image
+/// @param keypoints List of keypoints
+/// @param scales_count Number of scales
 void draw_keypoints(Image& img, const std::vector<Keypoint>& keypoints,
                     float scales_count) {
     // Color map
@@ -774,4 +831,36 @@ void draw_keypoints(Image& img, const std::vector<Keypoint>& keypoints,
         int y2 = centerY + radius * std::sin(angle);
         img.draw_line(centerX, centerY, x2, y2, color);
     }
+}
+
+/// @brief Draw the matches between two images
+/// @param a First image
+/// @param b Second image
+/// @param matches List of matches
+void draw_matches(const Image& a, const Image& b,
+                  std::vector<KeypointMatch> matches) {
+    Image res(a.width + b.width, std::max(a.height, b.height), 3);
+
+    for (int i = 0; i < a.width; i++) {
+        for (int j = 0; j < a.height; j++) {
+            res.set_pixel(i, j, R, a.get_pixel(i, j, R));
+            res.set_pixel(i, j, G, a.get_pixel(i, j, a.channels == 3 ? G : R));
+            res.set_pixel(i, j, B, a.get_pixel(i, j, a.channels == 3 ? B : R));
+        }
+    }
+    for (int i = 0; i < b.width; i++) {
+        for (int j = 0; j < b.height; j++) {
+            res.set_pixel(a.width + i, j, R, b.get_pixel(i, j, R));
+            res.set_pixel(a.width + i, j, G,
+                          b.get_pixel(i, j, b.channels == 3 ? G : R));
+            res.set_pixel(a.width + i, j, B,
+                          b.get_pixel(i, j, b.channels == 3 ? B : R));
+        }
+    }
+
+    for (auto& m : matches) {
+        res.draw_line(m.kp1.x, m.kp1.y, a.width + m.kp2.x, m.kp2.y);
+    }
+
+    res.save("matches.png");
 }
