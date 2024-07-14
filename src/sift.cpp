@@ -698,4 +698,51 @@ void draw_keypoints(Image& img,
       int y2 = centerY + radius * std::sin(angle * M_PI / 180.0f);
       img.draw_line(centerX, centerY, x2, y2, color);
     }
+
 }
+
+static float euclid_dist(const std::vector<float>& desc1, const std::vector<float>& desc2) {
+    float sum = 0.0f;
+    for (size_t i = 0; i < desc1.size(); i++) {
+        float diff = desc1[i] - desc2[i];
+        sum += diff * diff;
+    }
+    return std::sqrt(sum);
+}
+
+std::vector<KeypointMatch> match_keypoints(
+    const std::vector<Keypoint>& keypoints1, const std::vector<std::vector<float>>& descriptors1,
+    const std::vector<Keypoint>& keypoints2, const std::vector<std::vector<float>>& descriptors2,
+    float ratio_threshold) {
+
+    std::vector<KeypointMatch> matches;
+
+    for (size_t i = 0; i < keypoints1.size(); i++) {
+        const auto& desc1 = descriptors1[i];
+        float best_distance = std::numeric_limits<float>::max();
+        float second_best_distance = std::numeric_limits<float>::max();
+        size_t best_index = 0;
+
+        for (size_t j = 0; j < keypoints2.size(); j++) {
+            const auto& desc2 = descriptors2[j];
+            float distance = euclid_dist(desc1, desc2);
+
+            if (distance < best_distance) {
+                second_best_distance = best_distance;
+                best_distance = distance;
+                best_index = j;
+            } else if (distance < second_best_distance) {
+                second_best_distance = distance;
+            }
+        }
+
+        if (best_distance < ratio_threshold * second_best_distance) {
+            matches.emplace_back(keypoints1[i], keypoints2[best_index], best_distance);
+        }
+    }
+
+    return matches;
+}
+
+
+
