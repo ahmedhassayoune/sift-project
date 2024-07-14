@@ -2,6 +2,8 @@
 
 #include "image.hh"
 
+#define M_PI2 6.283185307179586
+
 #define MAX_CONVERGENCE_STEPS 5
 #define CONVERGENCE_THR 0.5f
 #define ORI_SMOOTH_ITERATIONS 2

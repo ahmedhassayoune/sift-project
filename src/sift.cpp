@@ -23,17 +23,6 @@ void clean_keypoints(std::vector<Keypoint>& keypoints) {
     keypoints.erase(last, keypoints.end());
 }
 
-/// @brief Compute the total sigma for a given scale index
-/// @param gaussian_kernels The successive Gaussian kernels
-/// @param scale_idx The scale index
-/// @return The total sigma
-float compute_sigma(const std::vector<float>& gaussian_kernels, int scale_idx) {
-    float start_sigma = gaussian_kernels[0];
-    float current_sigma = gaussian_kernels[scale_idx];
-
-    return std::sqrt(current_sigma * current_sigma + start_sigma * start_sigma);
-}
-
 /// @brief Get the pixel cube for a given pixel in the DoG images as (z, x, y)
 /// @param dog_images DoG images
 /// @param x x-coordinate
@@ -497,7 +486,7 @@ std::vector<Keypoint> compute_orientations(
                 float angle = std::atan2(dy, dx);
                 float weight = std::exp(-(i * i + j * j) / exp_denom);
 
-                int h_idx = std::round(num_bins * (angle + M_PI) / 2 * M_PI);
+                int h_idx = std::round(num_bins * (angle + M_PI) / M_PI2);
                 h_idx = (h_idx < num_bins) ? h_idx : 0;
                 hist[h_idx] += weight * magnitude;
             }
@@ -525,8 +514,8 @@ std::vector<Keypoint> compute_orientations(
                 float interpolated_i =
                     i + 0.5f * (h0 - h2) / (h0 - 2 * h1 + h2);
                 interpolated_i = std::fmod(interpolated_i + num_bins, num_bins);
-                float ori = 2 * M_PI * interpolated_i / num_bins;
-                ori = std::fmod(ori + 2 * M_PI, 2 * M_PI);
+                float ori = M_PI2 * interpolated_i / num_bins;
+                ori = std::fmod(ori + M_PI2, M_PI2);
 
                 Keypoint ori_kp = kp;
                 ori_kp.pori = ori;
@@ -627,7 +616,7 @@ void compute_descriptors(std::vector<Keypoint>& keypoints,
         int x = kp.x / std::pow(2, kp.octave - 1);
         int y = kp.y / std::pow(2, kp.octave - 1);
 
-        float bins_per_rad = DESC_HIST_BINS / (2 * M_PI);
+        float bins_per_rad = DESC_HIST_BINS / M_PI2;
         float cos_angle = std::cos(kp.pori);
         float sin_angle = std::sin(kp.pori);
 
@@ -667,8 +656,8 @@ void compute_descriptors(std::vector<Keypoint>& keypoints,
                         float angle = std::atan2(dy, dx);
 
                         angle -= kp.pori;
-                        angle = std::fmod(std::fmod(angle, 2 * M_PI) + 2 * M_PI,
-                                          2 * M_PI);
+                        angle =
+                            std::fmod(std::fmod(angle, M_PI2) + M_PI2, M_PI2);
 
                         float ori_bin = angle * bins_per_rad;
                         float weight =
