@@ -2,7 +2,7 @@
 CXX = g++
 
 # Define compiler flags for release and debug builds
-CXXFLAGS_RELEASE = -Wall -Werror -Wshadow -std=c++17 -O2
+CXXFLAGS_RELEASE = -Wall -Werror -Wshadow -std=c++17 -O3
 CXXFLAGS_DEBUG = -Wall -Werror -Wshadow -std=c++17 -O2 -g -fsanitize=address
 
 # Define the output executable name
