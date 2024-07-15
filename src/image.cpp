@@ -120,6 +120,39 @@ Image apply_convolution(const Image& img, const std::vector<double>& kernel) {
     return new_img;
 }
 
+/// @brief Apply a Gaussian blur to an image
+/// @param img Image to apply the blur to
+/// @param sigma Standard deviation of the Gaussian kernel
+/// @return The blurred image
+Image apply_gaussian_blur(const Image& img, double sigma) {
+    int kernel_size = 2 * static_cast<int>(std::ceil(3 * sigma)) + 1;
+    std::vector<double> kernel(kernel_size * kernel_size);
+    double sum = 0.0;
+
+    // Compute the Gaussian kernel
+    for (int i = 0; i < kernel_size; i++) {
+        for (int j = 0; j < kernel_size; j++) {
+            int x = i - kernel_size / 2;
+            int y = j - kernel_size / 2;
+            kernel[i * kernel_size + j] =
+                std::exp(-(x * x + y * y) / (2 * sigma * sigma)) /
+                (2 * M_PI * sigma * sigma);
+            sum += kernel[i * kernel_size + j];
+        }
+    }
+
+    // Normalize the kernel
+    for (int i = 0; i < kernel_size; i++) {
+        kernel[i] /= sum;
+    }
+
+    return apply_convolution(img, kernel);
+}
+
+/// @brief Apply a double 1D convolution to an image
+/// @param img Image to apply the convolution to
+/// @param kernel 1D **SYMMETRICAL** convolution kernel
+/// @return The convolved image
 Image apply_double_convolution_1d(const Image& img,
                                   const std::vector<double>& kernel) {
     if (img.channels != 1) {
@@ -183,30 +216,10 @@ Image apply_double_convolution_1d(const Image& img,
     return new_img;
 }
 
-/// @brief Apply a Gaussian blur to an image
+/// @brief Apply a fast Gaussian blur to an image using two 1D convolutions
 /// @param img Image to apply the blur to
 /// @param sigma Standard deviation of the Gaussian kernel
 /// @return The blurred image
-Image apply_gaussian_blur(const Image& img, double sigma) {
-    int kernel_size = 2 * static_cast<int>(std::ceil(3 * sigma)) + 1;
-    std::vector<double> kernel(kernel_size * kernel_size);
-    double sum = 0.0;
-
-    // Compute the Gaussian kernel
-    for (int i = 0; i < kernel_size; i++) {
-        for (int j = 0; j < kernel_size; j++) {
-            int x = i - kernel_size / 2;
-            int y = j - kernel_size / 2;
-            kernel[i * kernel_size + j] =
-                std::exp(-(x * x + y * y) / (2 * sigma * sigma)) /
-                (2 * M_PI * sigma * sigma);
-            sum += kernel[i * kernel_size + j];
-        }
-    }
-
-    return apply_convolution(img, kernel);
-}
-
 Image apply_gaussian_blur_fast(const Image& img, double sigma) {
     if (img.channels != 1) {
         throw std::runtime_error(
@@ -224,11 +237,6 @@ Image apply_gaussian_blur_fast(const Image& img, double sigma) {
         int x = i - kernel_size / 2;
         kernel[i] = std::exp(-x * x / exp_denom) * coef;
         sum += kernel[i];
-    }
-
-    // Normalize the kernel
-    for (int i = 0; i < kernel_size; i++) {
-        kernel[i] /= sum;
     }
 
     return apply_double_convolution_1d(img, kernel);
