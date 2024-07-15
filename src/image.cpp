@@ -120,6 +120,69 @@ Image apply_convolution(const Image& img, const std::vector<float>& kernel) {
     return new_img;
 }
 
+Image apply_double_convolution_1d(const Image& img,
+                                  const std::vector<float>& kernel) {
+    if (img.channels != 1) {
+        throw std::runtime_error(
+            "Convolution only supported for grayscale images");
+    }
+
+    int kernel_size = kernel.size();
+    int kernel_radius = kernel_size / 2;
+    Image new_img(img.width, img.height, img.channels);
+
+    // Apply horizontal pass
+    for (int i = 0; i < new_img.width; i++) {
+        for (int j = 0; j < new_img.height; j++) {
+            double result = img(i, j, Channel::GRAY) * kernel[kernel_radius];
+            double sum_w = kernel[kernel_radius];
+            for (int u = 1; u <= kernel_radius; u++) {
+                int x1 = i + u;
+                int x2 = i - u;
+                if (x1 < img.width) {
+                    result +=
+                        img(x1, j, Channel::GRAY) * kernel[kernel_radius + u];
+                    sum_w += kernel[kernel_radius + u];
+                }
+                if (x2 >= 0) {
+                    result +=
+                        img(x2, j, Channel::GRAY) * kernel[kernel_radius - u];
+                    sum_w += kernel[kernel_radius - u];
+                }
+            }
+            result /= sum_w;
+            new_img.set_pixel(i, j, Channel::GRAY, result);
+        }
+    }
+
+    // Apply vertical pass
+    for (int i = 0; i < new_img.width; i++) {
+        for (int j = 0; j < new_img.height; j++) {
+            double result =
+                new_img(i, j, Channel::GRAY) * kernel[kernel_radius];
+            double sum_w = kernel[kernel_radius];
+            for (int v = 1; v <= kernel_radius; v++) {
+                int y1 = j + v;
+                int y2 = j - v;
+                if (y1 < img.height) {
+                    result += new_img(i, y1, Channel::GRAY) *
+                              kernel[kernel_radius + v];
+                    sum_w += kernel[kernel_radius + v];
+                }
+                if (y2 >= 0) {
+                    result += new_img(i, y2, Channel::GRAY) *
+                              kernel[kernel_radius - v];
+                    sum_w += kernel[kernel_radius - v];
+                }
+            }
+            result /= sum_w;
+            new_img.set_pixel(i, j, Channel::GRAY, result);
+        }
+    }
+
+    return new_img;
+}
+
 /// @brief Apply a Gaussian blur to an image
 /// @param img Image to apply the blur to
 /// @param sigma Standard deviation of the Gaussian kernel
@@ -141,14 +204,34 @@ Image apply_gaussian_blur(const Image& img, float sigma) {
         }
     }
 
-    // Normalize the kernel
-    for (int i = 0; i < kernel_size; i++) {
-        for (int j = 0; j < kernel_size; j++) {
-            kernel[i * kernel_size + j] /= sum;
-        }
+    return apply_convolution(img, kernel);
+}
+
+Image apply_gaussian_blur_fast(const Image& img, float sigma) {
+    if (img.channels != 1) {
+        throw std::runtime_error(
+            "Convolution only supported for grayscale images");
     }
 
-    return apply_convolution(img, kernel);
+    int kernel_size = 2 * static_cast<int>(std::ceil(3 * sigma)) + 1;
+    std::vector<float> kernel(kernel_size);
+    float sum = 0.0f;
+    float coef = 1 / (std::sqrt(2 * M_PI) * sigma);
+    float exp_denom = 2 * sigma * sigma;
+
+    // Compute the Gaussian kernel
+    for (int i = 0; i < kernel_size; i++) {
+        int x = i - kernel_size / 2;
+        kernel[i] = std::exp(-x * x / exp_denom) * coef;
+        sum += kernel[i];
+    }
+
+    // Normalize the kernel
+    for (int i = 0; i < kernel_size; i++) {
+        kernel[i] /= sum;
+    }
+
+    return apply_double_convolution_1d(img, kernel);
 }
 
 /// @brief Draw keypoints on an image

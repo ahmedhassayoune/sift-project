@@ -119,7 +119,7 @@ Image compute_initial_image(const Image& img, float sigma) {
     }
 
     sigma = std::sqrt(sigma * sigma - 1);
-    return apply_gaussian_blur(initial_img, sigma);
+    return apply_gaussian_blur_fast(initial_img, sigma);
 }
 
 /// @brief Compute the number of octaves for a given image size
@@ -726,6 +726,15 @@ std::vector<Keypoint> detect_keypoints_and_descriptors(
     auto gaussian_images =
         compute_gaussian_images(initial_image, octaves_count, gaussian_kernels);
     std::cout << "Gaussian images computed!" << std::endl;
+
+    // Save gaussian images
+    for (size_t i = 0; i < gaussian_images.size(); ++i) {
+        for (size_t j = 0; j < gaussian_images[i].size(); ++j) {
+            std::string filename = "temp/gaussian_" + std::to_string(i) + "_" +
+                                   std::to_string(j) + ".png";
+            gaussian_images[i][j].save(filename);
+        }
+    }
 
     std::cout << "Computing DoG images..." << std::endl;
     auto dog_images =
