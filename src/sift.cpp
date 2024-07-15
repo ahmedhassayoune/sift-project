@@ -5,12 +5,12 @@
 #include <tuple>
 
 namespace {
-const float rad_to_deg = 180.0f / M_PI;
-const float deg_to_rad = M_PI / 180.0f;
+const double rad_to_deg = 180.0 / M_PI;
+const double deg_to_rad = M_PI / 180.0;
 
-using Vector = std::array<float, 3>;
-using Matrix = std::array<std::array<float, 3>, 3>;
-using PixelCube = std::array<std::array<std::array<float, 3>, 3>, 3>;
+using Vector = std::array<double, 3>;
+using Matrix = std::array<std::array<double, 3>, 3>;
+using PixelCube = std::array<std::array<std::array<double, 3>, 3>, 3>;
 using Extrema = std::tuple<int, int, int, int>;
 using GaussianPyramid = std::vector<std::vector<Image>>;
 using DogPyramid = GaussianPyramid;
@@ -36,7 +36,7 @@ PixelCube get_pixel_cube(const std::vector<Image>& dog_images, int x, int y,
         for (int dx = -1; dx <= 1; ++dx) {
             for (int dy = -1; dy <= 1; ++dy) {
                 pixel_cube[dz + 1][dx + 1][dy + 1] =
-                    dog_images[z + dz](x + dx, y + dy, Channel::GRAY) / 255.0f;
+                    dog_images[z + dz](x + dx, y + dy, Channel::GRAY) / 255.0;
             }
         }
     }
@@ -85,10 +85,10 @@ Matrix compute_hessian(const PixelCube& pixel_cube) {
 /// @return The offset as (dz, dx, dy)
 Vector fit_quadratic(const Vector& g, const Matrix& h) {
     Matrix hinv;
-    float det = h[0][0] * h[1][1] * h[2][2] +
-                2 * (h[0][1] * h[1][2] * h[2][0]) -
-                h[0][2] * h[1][1] * h[2][0] - h[0][0] * h[1][2] * h[2][1] -
-                h[0][1] * h[1][0] * h[2][2];
+    double det = h[0][0] * h[1][1] * h[2][2] +
+                 2 * (h[0][1] * h[1][2] * h[2][0]) -
+                 h[0][2] * h[1][1] * h[2][0] - h[0][0] * h[1][2] * h[2][1] -
+                 h[0][1] * h[1][0] * h[2][2];
 
     hinv[0][0] = (h[1][1] * h[2][2] - h[1][2] * h[2][1]) / det;
     hinv[0][1] = (h[0][2] * h[2][1] - h[0][1] * h[2][2]) / det;
@@ -109,7 +109,7 @@ Vector fit_quadratic(const Vector& g, const Matrix& h) {
 /// @param img Input image
 /// @param sigma The initial sigma value
 /// @return The initial image
-Image compute_initial_image(const Image& img, float sigma) {
+Image compute_initial_image(const Image& img, double sigma) {
     Image initial_img;
     if (img.channels != 1) {
         Image gray_img = convert_to_grayscale(img);
@@ -137,14 +137,14 @@ int compute_octaves_count(int width, int height) {
 /// @param sigma The initial sigma value
 /// @param intervals The number of intervals
 /// @return The Gaussian kernels
-std::vector<float> compute_gaussian_kernels(float sigma, int intervals) {
+std::vector<double> compute_gaussian_kernels(double sigma, int intervals) {
     int gaussian_kernels_size = intervals + 3;
-    std::vector<float> gaussian_kernels(gaussian_kernels_size);
+    std::vector<double> gaussian_kernels(gaussian_kernels_size);
     gaussian_kernels[0] = sigma;
 
-    float k = std::pow(2.0, 1.0 / intervals);
+    double k = std::pow(2.0, 1.0 / intervals);
     for (int i = 1; i < gaussian_kernels_size; ++i) {
-        float sigma_prev = (std::pow(k, i - 1)) * sigma;
+        double sigma_prev = (std::pow(k, i - 1)) * sigma;
         gaussian_kernels[i] = sigma_prev * std::sqrt(k * k - 1);
     }
 
@@ -156,12 +156,12 @@ std::vector<float> compute_gaussian_kernels(float sigma, int intervals) {
 /// @param gaussian_kernels The successive Gaussian kernels
 /// @return The Gaussian octave
 std::vector<Image> compute_gaussian_octave(
-    const Image& img, std::vector<float>& gaussian_kernels) {
+    const Image& img, std::vector<double>& gaussian_kernels) {
     std::vector<Image> gaussian_images(gaussian_kernels.size());
 
     gaussian_images[0] = Image(img);
     for (size_t i = 1; i < gaussian_images.size(); ++i) {
-        float sigma = gaussian_kernels[i];
+        double sigma = gaussian_kernels[i];
         Image new_gaussian_image =
             apply_gaussian_blur(gaussian_images[i - 1], sigma);
         gaussian_images[i] = new_gaussian_image;
@@ -177,7 +177,7 @@ std::vector<Image> compute_gaussian_octave(
 /// @return The Gaussian images for each octave
 std::vector<std::vector<Image>> compute_gaussian_images(
     const Image& initial_img, int octaves_count,
-    std::vector<float>& gaussian_kernels) {
+    std::vector<double>& gaussian_kernels) {
     std::vector<std::vector<Image>> gaussian_images(octaves_count);
     Image img = initial_img;
 
@@ -225,7 +225,7 @@ bool is_extremum(const std::vector<Image>& octave_dog_images, int x, int y,
                  int z, int border) {
     int is_max = true;
     int is_min = true;
-    float pixel = octave_dog_images[z](x, y, Channel::GRAY);
+    double pixel = octave_dog_images[z](x, y, Channel::GRAY);
     for (int dx = -border; dx <= border; ++dx) {
         for (int dy = -border; dy <= border; ++dy) {
             for (int dz = -border; dz <= border; ++dz) {
@@ -233,7 +233,7 @@ bool is_extremum(const std::vector<Image>& octave_dog_images, int x, int y,
                     continue;
                 }
 
-                float dpixel =
+                double dpixel =
                     octave_dog_images[z + dz](x + dx, y + dy, Channel::GRAY);
 
                 if (pixel < dpixel) {
@@ -273,7 +273,7 @@ std::vector<Extrema> detect_octave_extrema(
     for (int x = border; x < width - border; ++x) {
         for (int y = border; y < height - border; ++y) {
             for (int z = border; z < depth - border; ++z) {
-                float pixel = octave_dog_images[z](x, y, Channel::GRAY);
+                double pixel = octave_dog_images[z](x, y, Channel::GRAY);
                 if (std::abs(pixel) <= threshold) {
                     continue;
                 }
@@ -293,16 +293,16 @@ std::vector<Extrema> detect_octave_extrema(
 /// @param gaussian_kernels The successive Gaussian kernels
 /// @param intervals Number of intervals
 /// @param window_size Size of the 3D window to search for extrema (Defaults to 3)
-/// @param contrast_threshold Threshold value for detecting extrema (Defaults to 0.04f)
+/// @param contrast_threshold Threshold value for detecting extrema (Defaults to 0.04)
 /// @return The extrema points
 std::vector<Extrema> detect_extrema(const DogPyramid& dog_images,
-                                    const std::vector<float>& gaussian_kernels,
+                                    const std::vector<double>& gaussian_kernels,
                                     const int intervals, const int window_size,
-                                    const float contrast_threshold) {
+                                    const double contrast_threshold) {
     std::vector<Extrema> total_extrema;
-    const float threshold =
-        floor(0.5f * contrast_threshold / static_cast<float>(intervals) *
-              255.0f);  // OpenCV formula
+    const double threshold =
+        floor(0.5 * contrast_threshold / static_cast<double>(intervals) *
+              255.0);  // OpenCV formula
 
     int octaves = dog_images.size();
     for (int octave = 0; octave < octaves; ++octave) {
@@ -327,9 +327,9 @@ std::vector<Extrema> detect_extrema(const DogPyramid& dog_images,
 /// @return The keypoints
 std::vector<Keypoint> compute_keypoints(
     const DogPyramid& dog_images, const std::vector<Extrema>& extrema,
-    const std::vector<float>& gaussian_kernels, const float init_sigma,
-    const int window_size, const int intervals, const float contrast_threshold,
-    const float eigen_ratio) {
+    const std::vector<double>& gaussian_kernels, const double init_sigma,
+    const int window_size, const int intervals, const double contrast_threshold,
+    const double eigen_ratio) {
     std::vector<Keypoint> keypoints;
     const int width = dog_images[0][0].width;
     const int height = dog_images[0][0].height;
@@ -342,8 +342,8 @@ std::vector<Keypoint> compute_keypoints(
             std::cout << "Computed keypoints " << count << "/" << extrema.size()
                       << "..." << std::endl;
         }
-        float x = std::get<0>(e);
-        float y = std::get<1>(e);
+        double x = std::get<0>(e);
+        double y = std::get<1>(e);
         int layer = std::get<2>(e);
         int octave = std::get<3>(e);
 
@@ -356,18 +356,18 @@ std::vector<Keypoint> compute_keypoints(
             Matrix hessian = compute_hessian(pixel_cube);
             offset = fit_quadratic(gradient, hessian);
 
-            float max_offset =
+            double max_offset =
                 std::max(std::abs(offset[0]),
                          std::max(std::abs(offset[1]), std::abs(offset[2])));
 
             if (max_offset < CONVERGENCE_THR)  // Converged
             {
                 // Step 1: Check contrast threshold of new extremum value
-                float dot_gradient_offset = gradient[0] * offset[0] +
-                                            gradient[1] * offset[1] +
-                                            gradient[2] * offset[2];
+                double dot_gradient_offset = gradient[0] * offset[0] +
+                                             gradient[1] * offset[1] +
+                                             gradient[2] * offset[2];
 
-                float interpolated_value =
+                double interpolated_value =
                     pixel_cube[1][1][1] + 0.5 * dot_gradient_offset;
                 bool valid_contrast = (std::abs(interpolated_value) *
                                        intervals) >= contrast_threshold;
@@ -378,9 +378,9 @@ std::vector<Keypoint> compute_keypoints(
                 }
 
                 // Step 2: Check if the extremum is not on the edge
-                float xy_h_tr = hessian[1][1] + hessian[2][2];
-                float xy_h_det = hessian[1][1] * hessian[2][2] -
-                                 hessian[1][2] * hessian[1][2];
+                double xy_h_tr = hessian[1][1] + hessian[2][2];
+                double xy_h_det = hessian[1][1] * hessian[2][2] -
+                                  hessian[1][2] * hessian[1][2];
 
                 if (xy_h_tr <= 0) {
                     step = MAX_CONVERGENCE_STEPS;
@@ -423,10 +423,11 @@ std::vector<Keypoint> compute_keypoints(
                (x + offset[1]);  // Scale back x to initial image size
         kp.y = std::pow(2, octave) *
                (y + offset[2]);  // Scale back y to initial image size
-        kp.size = init_sigma *
-                  std::pow(2, octave + (static_cast<float>(layer) + offset[0]) /
-                                           intervals);
-        kp.pori = 0.0f;
+        kp.size =
+            init_sigma *
+            std::pow(2, octave + (static_cast<double>(layer) + offset[0]) /
+                                     intervals);
+        kp.pori = 0.0;
 
         keypoints.push_back(kp);
         count++;
@@ -444,9 +445,9 @@ std::vector<Keypoint> compute_keypoints(
 /// @return The oriented keypoints
 std::vector<Keypoint> compute_orientations(
     const std::vector<Keypoint>& keypoints,
-    const std::vector<float>& gaussian_kernels,
+    const std::vector<double>& gaussian_kernels,
     const GaussianPyramid& gaussian_images, const int num_bins,
-    const float peak_ratio, const float ori_sigma_factor) {
+    const double peak_ratio, const double ori_sigma_factor) {
     std::vector<Keypoint> ori_keypoints;
     for (const Keypoint& kp : keypoints) {
         int octave = kp.octave;
@@ -454,19 +455,19 @@ std::vector<Keypoint> compute_orientations(
                            std::pow(2, octave));  // Scale back x to octave size
         int y = std::round(kp.y /
                            std::pow(2, octave));  // Scale back y to octave size
-        float size =
+        double size =
             kp.size / std::pow(2, octave);  // Scale back size to octave size
 
-        float scale = ori_sigma_factor * size;
+        double scale = ori_sigma_factor * size;
         int radius = std::round(
             3 * scale);  // 3-sigma to cover 99.7% of the distribution
-        float exp_denom = 2 * scale * scale;
+        double exp_denom = 2 * scale * scale;
         Image img = gaussian_images[octave][kp.layer];
         int width = img.width;
         int height = img.height;
 
         // Step 1: Compute the orientation histogram
-        std::vector<float> hist(num_bins, 0.0f);
+        std::vector<double> hist(num_bins, 0.0);
         for (int i = -radius; i <= radius; ++i) {
             if (x + i - 1 < 0 || x + i + 1 >= width) {
                 continue;
@@ -477,14 +478,14 @@ std::vector<Keypoint> compute_orientations(
                     continue;
                 }
 
-                float dx = img(x + i + 1, y + j, Channel::GRAY) -
-                           img(x + i - 1, y + j, Channel::GRAY);
-                float dy = img(x + i, y + j - 1, Channel::GRAY) -
-                           img(x + i, y + j + 1, Channel::GRAY);
+                double dx = img(x + i + 1, y + j, Channel::GRAY) -
+                            img(x + i - 1, y + j, Channel::GRAY);
+                double dy = img(x + i, y + j - 1, Channel::GRAY) -
+                            img(x + i, y + j + 1, Channel::GRAY);
 
-                float magnitude = std::sqrt(dx * dx + dy * dy);
-                float angle = std::atan2(dy, dx);
-                float weight = std::exp(-(i * i + j * j) / exp_denom);
+                double magnitude = std::sqrt(dx * dx + dy * dy);
+                double angle = std::atan2(dy, dx);
+                double weight = std::exp(-(i * i + j * j) / exp_denom);
 
                 int h_idx = std::round(num_bins * (angle + M_PI) / M_PI2);
                 h_idx = (h_idx < num_bins) ? h_idx : 0;
@@ -495,26 +496,26 @@ std::vector<Keypoint> compute_orientations(
         // Step 2: Smooth histogram
         for (int iter = 0; iter < ORI_SMOOTH_ITERATIONS; ++iter) {
             for (int i = 0; i < num_bins; ++i) {
-                float h0 = hist[(i - 1 + num_bins) % num_bins];
-                float h1 = hist[i];
-                float h2 = hist[(i + 1) % num_bins];
+                double h0 = hist[(i - 1 + num_bins) % num_bins];
+                double h1 = hist[i];
+                double h2 = hist[(i + 1) % num_bins];
 
-                hist[i] = 0.25f * h0 + 0.5f * h1 + 0.25f * h2;
+                hist[i] = 0.25 * h0 + 0.5 * h1 + 0.25 * h2;
             }
         }
 
         // Step 3: Find the peak orientations and fit a parabola for interpolation
-        float max_peak = *std::max_element(hist.begin(), hist.end());
+        double max_peak = *std::max_element(hist.begin(), hist.end());
         for (int i = 0; i < num_bins; ++i) {
-            float h0 = hist[(i - 1 + num_bins) % num_bins];
-            float h1 = hist[i];
-            float h2 = hist[(i + 1) % num_bins];
+            double h0 = hist[(i - 1 + num_bins) % num_bins];
+            double h1 = hist[i];
+            double h2 = hist[(i + 1) % num_bins];
 
             if (h1 > h0 && h1 > h2 && h1 > (peak_ratio * max_peak)) {
-                float interpolated_i =
-                    i + 0.5f * (h0 - h2) / (h0 - 2 * h1 + h2);
+                double interpolated_i =
+                    i + 0.5 * (h0 - h2) / (h0 - 2 * h1 + h2);
                 interpolated_i = std::fmod(interpolated_i + num_bins, num_bins);
-                float ori = M_PI2 * interpolated_i / num_bins;
+                double ori = M_PI2 * interpolated_i / num_bins;
                 ori = std::fmod(ori + M_PI2, M_PI2);
 
                 Keypoint ori_kp = kp;
@@ -537,9 +538,9 @@ std::vector<Keypoint> compute_orientations(
 /// @param ori_bin Orientation bin
 /// @param magnitude Magnitude
 void update_histogram(
-    float histograms[DESC_HIST_WIDTH][DESC_HIST_WIDTH][DESC_HIST_BINS],
-    float row_bin, float col_bin, float ori_bin, float magnitude) {
-    float delta_r, delta_c, delta_o, val_r, val_c, val_o;
+    double histograms[DESC_HIST_WIDTH][DESC_HIST_WIDTH][DESC_HIST_BINS],
+    double row_bin, double col_bin, double ori_bin, double magnitude) {
+    double delta_r, delta_c, delta_o, val_r, val_c, val_o;
     int base_r, base_c, base_o, r_idx, c_idx, o_idx, r, c, o;
 
     base_r = std::floor(row_bin);
@@ -572,19 +573,19 @@ void update_histogram(
 /// @param histograms Histograms
 /// @param kp Keypoint
 void convert_hist_to_desc(
-    float histograms[DESC_HIST_WIDTH][DESC_HIST_WIDTH][DESC_HIST_BINS],
+    double histograms[DESC_HIST_WIDTH][DESC_HIST_WIDTH][DESC_HIST_BINS],
     Keypoint& kp) {
     int size = DESC_HIST_WIDTH * DESC_HIST_WIDTH * DESC_HIST_BINS;
-    float* hists = reinterpret_cast<float*>(histograms);
+    double* hists = reinterpret_cast<double*>(histograms);
 
-    float norm = 0.0f;
+    double norm = 0.0;
     for (int i = 0; i < size; i++) {
         norm += hists[i] * hists[i];
     }
     norm = std::sqrt(norm);
-    float norm_inv = 1.0f / norm;
+    double norm_inv = 1.0 / norm;
 
-    norm = 0.0f;
+    norm = 0.0;
     for (int i = 0; i < size; i++) {
         hists[i] *= norm_inv;
         if (hists[i] > DESC_MAGNITUDE_THR)
@@ -592,7 +593,7 @@ void convert_hist_to_desc(
         norm += hists[i] * hists[i];
     }
     norm = std::sqrt(norm);
-    norm_inv = 1.0f / norm;
+    norm_inv = 1.0 / norm;
 
     for (int i = 0; i < size; i++) {
         int val = (int)std::floor(INT_DESCR_FCTR * hists[i] * norm_inv);
@@ -606,8 +607,8 @@ void convert_hist_to_desc(
 /// @param scale_factor Scale factor for the descriptor
 void compute_descriptors(std::vector<Keypoint>& keypoints,
                          const GaussianPyramid& gaussian_pyramid,
-                         float scale_factor) {
-    std::vector<std::vector<float>> descriptors;
+                         double scale_factor) {
+    std::vector<std::vector<double>> descriptors;
 
     for (auto& kp : keypoints) {
         const Image img = gaussian_pyramid[kp.octave][kp.layer];
@@ -616,51 +617,50 @@ void compute_descriptors(std::vector<Keypoint>& keypoints,
         int x = kp.x / std::pow(2, kp.octave - 1);
         int y = kp.y / std::pow(2, kp.octave - 1);
 
-        float bins_per_rad = DESC_HIST_BINS / M_PI2;
-        float cos_angle = std::cos(kp.pori);
-        float sin_angle = std::sin(kp.pori);
+        double bins_per_rad = DESC_HIST_BINS / M_PI2;
+        double cos_angle = std::cos(kp.pori);
+        double sin_angle = std::sin(kp.pori);
 
-        float histograms[DESC_HIST_WIDTH][DESC_HIST_WIDTH][DESC_HIST_BINS] = {
+        double histograms[DESC_HIST_WIDTH][DESC_HIST_WIDTH][DESC_HIST_BINS] = {
             0};
 
-        float hist_width = scale_factor * kp.size / std::pow(2, kp.octave - 1);
-        float exp_denom = 0.5f * DESC_HIST_WIDTH * DESC_HIST_WIDTH;
-        double tmp_radius = std::round(hist_width * 0.5f * std::sqrt(2.0f) *
-                                           (DESC_HIST_WIDTH + 1.0) +
-                                       0.5f);
+        double hist_width = scale_factor * kp.size / std::pow(2, kp.octave - 1);
+        double exp_denom = 0.5 * DESC_HIST_WIDTH * DESC_HIST_WIDTH;
+        double tmp_radius = std::round(
+            hist_width * 0.5 * std::sqrt(2.0) * (DESC_HIST_WIDTH + 1.0) + 0.5);
         int radius =
             std::min(tmp_radius, std::sqrt(width * width + height * height));
 
         for (int row = -radius; row <= radius; ++row) {
             for (int col = -radius; col <= radius; ++col) {
-                float row_rot =
+                double row_rot =
                     (col * sin_angle + row * cos_angle) / hist_width;
-                float col_rot =
+                double col_rot =
                     (col * cos_angle - row * sin_angle) / hist_width;
 
-                float row_bin = row_rot + DESC_HIST_WIDTH / 2 - 0.5f;
-                float col_bin = col_rot + DESC_HIST_WIDTH / 2 - 0.5f;
+                double row_bin = row_rot + DESC_HIST_WIDTH / 2 - 0.5;
+                double col_bin = col_rot + DESC_HIST_WIDTH / 2 - 0.5;
 
-                if (row_bin > -1.0f && row_bin < DESC_HIST_WIDTH &&
-                    col_bin > -1.0f && col_bin < DESC_HIST_WIDTH) {
+                if (row_bin > -1.0 && row_bin < DESC_HIST_WIDTH &&
+                    col_bin > -1.0 && col_bin < DESC_HIST_WIDTH) {
                     int new_y = row + y;
                     int new_x = col + x;
                     if (new_x > 0 && new_x < (width - 1) && new_y > 0 &&
                         new_y < (height - 1)) {
-                        float dx = img(new_x + 1, new_y, Channel::GRAY) -
-                                   img(new_x - 1, new_y, Channel::GRAY);
-                        float dy = img(new_x, new_y - 1, Channel::GRAY) -
-                                   img(new_x, new_y + 1, Channel::GRAY);
+                        double dx = img(new_x + 1, new_y, Channel::GRAY) -
+                                    img(new_x - 1, new_y, Channel::GRAY);
+                        double dy = img(new_x, new_y - 1, Channel::GRAY) -
+                                    img(new_x, new_y + 1, Channel::GRAY);
 
-                        float magnitude = std::sqrt(dx * dx + dy * dy);
-                        float angle = std::atan2(dy, dx);
+                        double magnitude = std::sqrt(dx * dx + dy * dy);
+                        double angle = std::atan2(dy, dx);
 
                         angle -= kp.pori;
                         angle =
                             std::fmod(std::fmod(angle, M_PI2) + M_PI2, M_PI2);
 
-                        float ori_bin = angle * bins_per_rad;
-                        float weight =
+                        double ori_bin = angle * bins_per_rad;
+                        double weight =
                             std::exp(-(row_rot * row_rot + col_rot * col_rot) /
                                      exp_denom);
                         update_histogram(histograms, row_bin, col_bin, ori_bin,
@@ -678,8 +678,8 @@ void compute_descriptors(std::vector<Keypoint>& keypoints,
 /// @param desc1 First descriptor
 /// @param desc2 Second descriptor
 /// @return The distance
-float euclid_dist(const uint8_t desc1[128], const uint8_t desc2[128]) {
-    float sum = 0.0f;
+double euclid_dist(const uint8_t desc1[128], const uint8_t desc2[128]) {
+    double sum = 0.0;
     for (size_t i = 0; i < 128; i++) {
         int diff = static_cast<int>(desc1[i]) - static_cast<int>(desc2[i]);
         sum += diff * diff;
@@ -702,10 +702,10 @@ float euclid_dist(const uint8_t desc1[128], const uint8_t desc2[128]) {
 /// @param desc_scale_factor Scale factor for the descriptor
 /// @return The keypoints and descriptors
 std::vector<Keypoint> detect_keypoints_and_descriptors(
-    const Image& img, const float init_sigma, const int intervals,
-    const int window_size, const float contrast_threshold,
-    const float eigen_ratio, const float num_bins, const float peak_ratio,
-    const float ori_sigma_factor, const float desc_scale_factor) {
+    const Image& img, const double init_sigma, const int intervals,
+    const int window_size, const double contrast_threshold,
+    const double eigen_ratio, const double num_bins, const double peak_ratio,
+    const double ori_sigma_factor, const double desc_scale_factor) {
     Image initial_image = compute_initial_image(img, init_sigma);
     std::cout << "Initial image computed: " << initial_image.width << "x"
               << initial_image.height << std::endl;
@@ -714,10 +714,10 @@ std::vector<Keypoint> detect_keypoints_and_descriptors(
         compute_octaves_count(initial_image.width, initial_image.height);
     std::cout << "Octaves count: " << octaves_count << std::endl;
 
-    std::vector<float> gaussian_kernels =
+    std::vector<double> gaussian_kernels =
         compute_gaussian_kernels(init_sigma, intervals);
     std::cout << "Gaussian kernels: [ ";
-    for (float kernel : gaussian_kernels) {
+    for (double kernel : gaussian_kernels) {
         std::cout << kernel << " ";
     }
     std::cout << "]" << std::endl;
@@ -772,19 +772,19 @@ std::vector<Keypoint> detect_keypoints_and_descriptors(
 /// @return The matched keypoints
 std::vector<KeypointMatch> match_keypoints(
     const std::vector<Keypoint>& keypoints1,
-    const std::vector<Keypoint>& keypoints2, float ratio_threshold) {
+    const std::vector<Keypoint>& keypoints2, double ratio_threshold) {
 
     std::vector<KeypointMatch> matches;
 
     for (size_t i = 0; i < keypoints1.size(); i++) {
         const auto& desc1 = keypoints1[i].desc;
-        float best_distance = std::numeric_limits<float>::max();
-        float second_best_distance = std::numeric_limits<float>::max();
+        double best_distance = std::numeric_limits<double>::max();
+        double second_best_distance = std::numeric_limits<double>::max();
         size_t best_index = 0;
 
         for (size_t j = 0; j < keypoints2.size(); j++) {
             const auto& desc2 = keypoints2[j].desc;
-            float distance = euclid_dist(desc1, desc2);
+            double distance = euclid_dist(desc1, desc2);
 
             if (distance < best_distance) {
                 second_best_distance = best_distance;
@@ -809,18 +809,18 @@ std::vector<KeypointMatch> match_keypoints(
 /// @param keypoints List of keypoints
 /// @param scales_count Number of scales
 void draw_keypoints(Image& img, const std::vector<Keypoint>& keypoints,
-                    float scales_count) {
+                    double scales_count) {
     // Color map
     std::vector<Color> colors = {Color::RED,    Color::GREEN,   Color::BLUE,
                                  Color::YELLOW, Color::MAGENTA, Color::CYAN,
                                  Color::BLACK};
 
-    const float max_radius = 110;
-    const float min_radius = 5;
+    const double max_radius = 110;
+    const double min_radius = 5;
     for (const Keypoint& kp : keypoints) {
         int centerX = kp.x;
         int centerY = kp.y;
-        float angle = kp.pori;
+        double angle = kp.pori;
         int radius = min_radius * std::exp(kp.layer / (scales_count - 1) *
                                            std::log(max_radius / min_radius));
         int color = colors[kp.layer % colors.size()];

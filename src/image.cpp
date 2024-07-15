@@ -13,10 +13,10 @@ Image convert_to_grayscale(const Image& img) {
     Image new_img(img.width, img.height, 1);
     for (int i = 0; i < new_img.width; i++) {
         for (int j = 0; j < new_img.height; j++) {
-            float r = img(i, j, R);
-            float g = img(i, j, G);
-            float b = img(i, j, B);
-            float value = 0.2126f * r + 0.7152f * g + 0.0722f * b;
+            double r = img(i, j, R);
+            double g = img(i, j, G);
+            double b = img(i, j, B);
+            double value = 0.2126 * r + 0.7152 * g + 0.0722 * b;
             new_img.set_pixel(i, j, Channel::GRAY, value);
         }
     }
@@ -65,21 +65,21 @@ Image resize_inter_bilinear(const Image& img, int fx, int fy) {
         for (int j = 0; j < new_img.height; j++) {
             for (int k = 0; k < new_img.channels; k++) {
                 Channel c = static_cast<Channel>(k);
-                float x = i / static_cast<float>(fx);
-                float y = j / static_cast<float>(fy);
+                double x = i / static_cast<double>(fx);
+                double y = j / static_cast<double>(fy);
                 int x0 = static_cast<int>(x);
                 int y0 = static_cast<int>(y);
                 int x1 = std::min(x0 + 1, img.width - 1);
                 int y1 = std::min(y0 + 1, img.height - 1);
-                float dx = x - x0;
-                float dy = y - y0;
-                float v00 = img(x0, y0, c);
-                float v01 = img(x0, y1, c);
-                float v10 = img(x1, y0, c);
-                float v11 = img(x1, y1, c);
-                float v0 = v00 * (1 - dx) + v10 * dx;
-                float v1 = v01 * (1 - dx) + v11 * dx;
-                float v = v0 * (1 - dy) + v1 * dy;
+                double dx = x - x0;
+                double dy = y - y0;
+                double v00 = img(x0, y0, c);
+                double v01 = img(x0, y1, c);
+                double v10 = img(x1, y0, c);
+                double v11 = img(x1, y1, c);
+                double v0 = v00 * (1 - dx) + v10 * dx;
+                double v1 = v01 * (1 - dx) + v11 * dx;
+                double v = v0 * (1 - dy) + v1 * dy;
                 new_img.set_pixel(i, j, c, v);
             }
         }
@@ -91,7 +91,7 @@ Image resize_inter_bilinear(const Image& img, int fx, int fy) {
 /// @param img Image to apply the convolution to
 /// @param kernel Convolution kernel
 /// @return The convolved image
-Image apply_convolution(const Image& img, const std::vector<float>& kernel) {
+Image apply_convolution(const Image& img, const std::vector<double>& kernel) {
     int kernel_size = std::sqrt(kernel.size());
     int kernel_radius = kernel_size / 2;
     Image new_img(img.width, img.height, img.channels);
@@ -100,7 +100,7 @@ Image apply_convolution(const Image& img, const std::vector<float>& kernel) {
         for (int j = 0; j < new_img.height; j++) {
             for (int k = 0; k < new_img.channels; k++) {
                 Channel c = static_cast<Channel>(k);
-                float result = 0;
+                double result = 0;
                 for (int u = -kernel_radius; u <= kernel_radius; u++) {
                     for (int v = -kernel_radius; v <= kernel_radius; v++) {
                         int x = i + u;
@@ -121,7 +121,7 @@ Image apply_convolution(const Image& img, const std::vector<float>& kernel) {
 }
 
 Image apply_double_convolution_1d(const Image& img,
-                                  const std::vector<float>& kernel) {
+                                  const std::vector<double>& kernel) {
     if (img.channels != 1) {
         throw std::runtime_error(
             "Convolution only supported for grayscale images");
@@ -187,10 +187,10 @@ Image apply_double_convolution_1d(const Image& img,
 /// @param img Image to apply the blur to
 /// @param sigma Standard deviation of the Gaussian kernel
 /// @return The blurred image
-Image apply_gaussian_blur(const Image& img, float sigma) {
+Image apply_gaussian_blur(const Image& img, double sigma) {
     int kernel_size = 2 * static_cast<int>(std::ceil(3 * sigma)) + 1;
-    std::vector<float> kernel(kernel_size * kernel_size);
-    float sum = 0;
+    std::vector<double> kernel(kernel_size * kernel_size);
+    double sum = 0.0;
 
     // Compute the Gaussian kernel
     for (int i = 0; i < kernel_size; i++) {
@@ -207,17 +207,17 @@ Image apply_gaussian_blur(const Image& img, float sigma) {
     return apply_convolution(img, kernel);
 }
 
-Image apply_gaussian_blur_fast(const Image& img, float sigma) {
+Image apply_gaussian_blur_fast(const Image& img, double sigma) {
     if (img.channels != 1) {
         throw std::runtime_error(
             "Convolution only supported for grayscale images");
     }
 
     int kernel_size = 2 * static_cast<int>(std::ceil(3 * sigma)) + 1;
-    std::vector<float> kernel(kernel_size);
-    float sum = 0.0f;
-    float coef = 1 / (std::sqrt(2 * M_PI) * sigma);
-    float exp_denom = 2 * sigma * sigma;
+    std::vector<double> kernel(kernel_size);
+    double sum = 0.0;
+    double coef = 1 / (std::sqrt(2 * M_PI) * sigma);
+    double exp_denom = 2 * sigma * sigma;
 
     // Compute the Gaussian kernel
     for (int i = 0; i < kernel_size; i++) {
