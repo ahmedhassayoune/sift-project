@@ -63,7 +63,8 @@ struct KeypointMatch {
 };
 
 std::vector<Keypoint> detect_keypoints_and_descriptors(
-    const Image& img, const double init_sigma = 1.6, const int intervals = 3,
+    const Image& img, const bool double_image_size = true,
+    const double init_sigma = 1.6, const int intervals = 3,
     const int window_size = 3, const double contrast_threshold = 0.04,
     const double eigen_ratio = 10.0, const double num_bins = 36,
     const double peak_ratio = 0.8, const double ori_sigma_factor = 1.5,

@@ -107,16 +107,19 @@ Vector fit_quadratic(const Vector& g, const Matrix& h) {
 
 /// @brief Compute the initial image for the SIFT algorithm
 /// @param img Input image
+/// @param double_image_size Whether to double the image size
 /// @param sigma The initial sigma value
 /// @return The initial image
-Image compute_initial_image(const Image& img, double sigma) {
+Image compute_initial_image(const Image& img, bool double_image_size,
+                            double sigma) {
     Image initial_img;
-    if (img.channels != 1) {
-        Image gray_img = convert_to_grayscale(img);
-        initial_img = resize_inter_bilinear(gray_img, 2, 2);
-    } else {
-        initial_img = resize_inter_bilinear(img, 2, 2);
-    }
+    if (img.channels != 1)
+        initial_img = convert_to_grayscale(img);
+    else
+        initial_img = Image(img);
+
+    if (double_image_size)
+        initial_img = resize_inter_bilinear(initial_img, 2, 2);
 
     sigma = std::sqrt(sigma * sigma - 1);
     return apply_gaussian_blur_fast(initial_img, sigma);
@@ -442,26 +445,27 @@ std::vector<Keypoint> compute_keypoints(
 /// @param num_bins Number of bins for the orientation histogram
 /// @param peak_ratio Peak ratio threshold for orientation histogram
 /// @param ori_sigma_factor Orientation sigma factor
+/// @param double_image_size Whether to double the image size
 /// @return The oriented keypoints
 std::vector<Keypoint> compute_orientations(
     const std::vector<Keypoint>& keypoints,
     const std::vector<double>& gaussian_kernels,
     const GaussianPyramid& gaussian_images, const int num_bins,
-    const double peak_ratio, const double ori_sigma_factor) {
+    const double peak_ratio, const double ori_sigma_factor,
+    const bool double_image_size) {
     std::vector<Keypoint> ori_keypoints;
     for (const Keypoint& kp : keypoints) {
         int octave = kp.octave;
-        int x = std::round(kp.x /
-                           std::pow(2, octave));  // Scale back x to octave size
-        int y = std::round(kp.y /
-                           std::pow(2, octave));  // Scale back y to octave size
-        double size =
-            kp.size / std::pow(2, octave);  // Scale back size to octave size
+
+        double pow_denom = 1.0 / std::pow(2, octave);
+        int x = std::round(kp.x * pow_denom);  // Scale back x to octave size
+        int y = std::round(kp.y * pow_denom);  // Scale back y to octave size
+        double size = kp.size * pow_denom;     // Scale back size to octave size
 
         double scale = ori_sigma_factor * size;
         int radius = std::round(
-            3 * scale);  // 3-sigma to cover 99.7% of the distribution
-        double exp_denom = 2 * scale * scale;
+            3.0 * scale);  // 3-sigma to cover 99.7% of the distribution
+        double exp_denom = 2.0 * scale * scale;
         Image img = gaussian_images[octave][kp.layer];
         int width = img.width;
         int height = img.height;
@@ -520,9 +524,11 @@ std::vector<Keypoint> compute_orientations(
 
                 Keypoint ori_kp = kp;
                 ori_kp.pori = ori;
-                ori_kp.x /= 2;     // Scale back x to input image size
-                ori_kp.y /= 2;     // Scale back y to input image size
-                ori_kp.size /= 2;  // Scale back size to input image size
+                if (double_image_size) {
+                    ori_kp.x /= 2;     // Scale back x to input image size
+                    ori_kp.y /= 2;     // Scale back y to input image size
+                    ori_kp.size /= 2;  // Scale back size to input image size
+                }
                 ori_keypoints.push_back(ori_kp);
             }
         }
@@ -605,17 +611,23 @@ void convert_hist_to_desc(
 /// @param keypoints List of keypoints
 /// @param gaussian_pyramid Gaussian pyramid
 /// @param scale_factor Scale factor for the descriptor
+/// @param double_image_size Whether to double the image size
 void compute_descriptors(std::vector<Keypoint>& keypoints,
                          const GaussianPyramid& gaussian_pyramid,
-                         double scale_factor) {
+                         double scale_factor, bool double_image_size) {
     std::vector<std::vector<double>> descriptors;
 
     for (auto& kp : keypoints) {
         const Image img = gaussian_pyramid[kp.octave][kp.layer];
         int width = img.width;
         int height = img.height;
-        int x = kp.x / std::pow(2, kp.octave - 1);
-        int y = kp.y / std::pow(2, kp.octave - 1);
+        // Because x, y are already scaled to input image size
+        double pow_denom = (double_image_size)
+                               ? (1.0 / std::pow(2, kp.octave - 1))
+                               : (1.0 / std::pow(2, kp.octave));
+        int x = kp.x * pow_denom;
+        int y = kp.y * pow_denom;
+        double size = kp.size * pow_denom;
 
         double bins_per_rad = DESC_HIST_BINS / M_PI2;
         double cos_angle = std::cos(kp.pori);
@@ -624,7 +636,7 @@ void compute_descriptors(std::vector<Keypoint>& keypoints,
         double histograms[DESC_HIST_WIDTH][DESC_HIST_WIDTH][DESC_HIST_BINS] = {
             0};
 
-        double hist_width = scale_factor * kp.size / std::pow(2, kp.octave - 1);
+        double hist_width = scale_factor * size;
         double exp_denom = 0.5 * DESC_HIST_WIDTH * DESC_HIST_WIDTH;
         double tmp_radius = std::round(
             hist_width * 0.5 * std::sqrt(2.0) * (DESC_HIST_WIDTH + 1.0) + 0.5);
@@ -691,6 +703,7 @@ double euclid_dist(const uint8_t desc1[128], const uint8_t desc2[128]) {
 
 /// @brief Detect keypoints and compute descriptors for an image
 /// @param img Input image
+/// @param double_image_size Whether to double the image size
 /// @param init_sigma Initial sigma value
 /// @param intervals Number of intervals for each octave
 /// @param window_size Size of the 3D window to search for extrema
@@ -702,11 +715,12 @@ double euclid_dist(const uint8_t desc1[128], const uint8_t desc2[128]) {
 /// @param desc_scale_factor Scale factor for the descriptor
 /// @return The keypoints and descriptors
 std::vector<Keypoint> detect_keypoints_and_descriptors(
-    const Image& img, const double init_sigma, const int intervals,
-    const int window_size, const double contrast_threshold,
+    const Image& img, const bool double_image_size, const double init_sigma,
+    const int intervals, const int window_size, const double contrast_threshold,
     const double eigen_ratio, const double num_bins, const double peak_ratio,
     const double ori_sigma_factor, const double desc_scale_factor) {
-    Image initial_image = compute_initial_image(img, init_sigma);
+    Image initial_image =
+        compute_initial_image(img, double_image_size, init_sigma);
     std::cout << "Initial image computed: " << initial_image.width << "x"
               << initial_image.height << std::endl;
 
@@ -743,9 +757,9 @@ std::vector<Keypoint> detect_keypoints_and_descriptors(
     std::cout << "Raw keypoints computed: " << keypoints.size() << std::endl;
 
     std::cout << "Computing orientations..." << std::endl;
-    keypoints =
-        compute_orientations(keypoints, gaussian_kernels, gaussian_images,
-                             num_bins, peak_ratio, ori_sigma_factor);
+    keypoints = compute_orientations(keypoints, gaussian_kernels,
+                                     gaussian_images, num_bins, peak_ratio,
+                                     ori_sigma_factor, double_image_size);
     std::cout << "Oriented keypoints computed: " << keypoints.size()
               << std::endl;
 
@@ -759,7 +773,8 @@ std::vector<Keypoint> detect_keypoints_and_descriptors(
     keypoints_image.save("keypoints.png");
 
     std::cout << "Computing descriptors..." << std::endl;
-    compute_descriptors(keypoints, gaussian_images, desc_scale_factor);
+    compute_descriptors(keypoints, gaussian_images, desc_scale_factor,
+                        double_image_size);
     std::cout << "Descriptors computed!" << std::endl;
 
     return keypoints;
