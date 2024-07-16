@@ -11,7 +11,7 @@ const double deg_to_rad = M_PI / 180.0;
 using Vector = std::array<double, 3>;
 using Matrix = std::array<std::array<double, 3>, 3>;
 using PixelCube = std::array<std::array<std::array<double, 3>, 3>, 3>;
-using Extrema = std::tuple<int, int, int, int>;
+using Extrema = std::tuple<double, double, int, int>;
 using GaussianPyramid = std::vector<std::vector<Image>>;
 using DogPyramid = GaussianPyramid;
 
@@ -36,7 +36,7 @@ PixelCube get_pixel_cube(const std::vector<Image>& dog_images, int x, int y,
         for (int dx = -1; dx <= 1; ++dx) {
             for (int dy = -1; dy <= 1; ++dy) {
                 pixel_cube[dz + 1][dx + 1][dy + 1] =
-                    dog_images[z + dz](x + dx, y + dy, Channel::GRAY) / 255.0;
+                    dog_images[z + dz](x + dx, y + dy) / 255.0;
             }
         }
     }
@@ -228,7 +228,7 @@ bool is_extremum(const std::vector<Image>& octave_dog_images, int x, int y,
                  int z, int border) {
     int is_max = true;
     int is_min = true;
-    double pixel = octave_dog_images[z](x, y, Channel::GRAY);
+    double pixel = octave_dog_images[z](x, y);
     for (int dx = -border; dx <= border; ++dx) {
         for (int dy = -border; dy <= border; ++dy) {
             for (int dz = -border; dz <= border; ++dz) {
@@ -236,8 +236,7 @@ bool is_extremum(const std::vector<Image>& octave_dog_images, int x, int y,
                     continue;
                 }
 
-                double dpixel =
-                    octave_dog_images[z + dz](x + dx, y + dy, Channel::GRAY);
+                double dpixel = octave_dog_images[z + dz](x + dx, y + dy);
 
                 if (pixel < dpixel) {
                     is_max = false;
@@ -276,7 +275,7 @@ std::vector<Extrema> detect_octave_extrema(
     for (int x = border; x < width - border; ++x) {
         for (int y = border; y < height - border; ++y) {
             for (int z = border; z < depth - border; ++z) {
-                double pixel = octave_dog_images[z](x, y, Channel::GRAY);
+                double pixel = octave_dog_images[z](x, y);
                 if (std::abs(pixel) <= threshold) {
                     continue;
                 }
@@ -342,10 +341,7 @@ std::vector<Keypoint> compute_keypoints(
             std::cout << "Computed keypoints " << count << "/" << extrema.size()
                       << "..." << std::endl;
         }
-        double x = std::get<0>(e);
-        double y = std::get<1>(e);
-        int layer = std::get<2>(e);
-        int octave = std::get<3>(e);
+        auto [x, y, layer, octave] = e;
 
         auto dog_octave = dog_images[octave];
         const int depth = dog_octave.size();
@@ -391,11 +387,11 @@ std::vector<Keypoint> compute_keypoints(
                     break;
                 }
 
-                bool valid_edge =
-                    (xy_h_tr * xy_h_tr * eigen_ratio) <
+                bool is_on_edge =
+                    (xy_h_tr * xy_h_tr * eigen_ratio) >=
                     ((eigen_ratio + 1) * (eigen_ratio + 1) * xy_h_det);
 
-                if (!valid_edge) {
+                if (is_on_edge) {
                     step = MAX_CONVERGENCE_STEPS;
                 }
 
@@ -420,17 +416,17 @@ std::vector<Keypoint> compute_keypoints(
             continue;
         }
 
+        double octave_scale = std::pow(2, octave);
         Keypoint kp;
         kp.octave = octave;
         kp.layer = layer;
-        kp.x = std::pow(2, octave) *
+        kp.x = octave_scale *
                (x + offset[1]);  // Scale back x to initial image size
-        kp.y = std::pow(2, octave) *
+        kp.y = octave_scale *
                (y + offset[2]);  // Scale back y to initial image size
         kp.size =
-            init_sigma *
-            std::pow(2, octave + (static_cast<double>(layer) + offset[0]) /
-                                     intervals);
+            init_sigma * octave_scale *
+            std::pow(2, (static_cast<double>(layer) + offset[0]) / intervals);
         kp.pori = 0.0;
 
         keypoints.push_back(kp);
@@ -483,10 +479,8 @@ std::vector<Keypoint> compute_orientations(
                     continue;
                 }
 
-                double dx = img(x + i + 1, y + j, Channel::GRAY) -
-                            img(x + i - 1, y + j, Channel::GRAY);
-                double dy = img(x + i, y + j - 1, Channel::GRAY) -
-                            img(x + i, y + j + 1, Channel::GRAY);
+                double dx = img(x + i + 1, y + j) - img(x + i - 1, y + j);
+                double dy = img(x + i, y + j - 1) - img(x + i, y + j + 1);
 
                 double magnitude = std::sqrt(dx * dx + dy * dy);
                 double angle = std::atan2(dy, dx);
@@ -660,10 +654,10 @@ void compute_descriptors(std::vector<Keypoint>& keypoints,
                     int new_x = col + x;
                     if (new_x > 0 && new_x < (width - 1) && new_y > 0 &&
                         new_y < (height - 1)) {
-                        double dx = img(new_x + 1, new_y, Channel::GRAY) -
-                                    img(new_x - 1, new_y, Channel::GRAY);
-                        double dy = img(new_x, new_y - 1, Channel::GRAY) -
-                                    img(new_x, new_y + 1, Channel::GRAY);
+                        double dx =
+                            img(new_x + 1, new_y) - img(new_x - 1, new_y);
+                        double dy =
+                            img(new_x, new_y - 1) - img(new_x, new_y + 1);
 
                         double magnitude = std::sqrt(dx * dx + dy * dy);
                         double angle = std::atan2(dy, dx);

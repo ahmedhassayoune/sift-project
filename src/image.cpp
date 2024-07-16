@@ -167,7 +167,7 @@ Image apply_double_convolution_1d(const Image& img,
     // Apply horizontal pass
     for (int i = 0; i < tmp.width; i++) {
         for (int j = 0; j < tmp.height; j++) {
-            double result = img(i, j, Channel::GRAY) * kernel[0];
+            double result = img(i, j) * kernel[0];
             double sum_w = kernel[0];
             for (int u = 1; u < kernel_size; u++) {
                 double w = kernel[u];
@@ -179,8 +179,7 @@ Image apply_double_convolution_1d(const Image& img,
                 if (x2 < 0)
                     x2 = 0;
 
-                result +=
-                    w * (img(x1, j, Channel::GRAY) + img(x2, j, Channel::GRAY));
+                result += w * (img(x1, j) + img(x2, j));
                 sum_w += 2.0 * w;
             }
             result /= sum_w;
@@ -191,7 +190,7 @@ Image apply_double_convolution_1d(const Image& img,
     // Apply vertical pass
     for (int i = 0; i < new_img.width; i++) {
         for (int j = 0; j < new_img.height; j++) {
-            double result = tmp(i, j, Channel::GRAY) * kernel[0];
+            double result = tmp(i, j) * kernel[0];
             double sum_w = kernel[0];
             for (int u = 1; u < kernel_size; u++) {
                 double w = kernel[u];
@@ -203,8 +202,7 @@ Image apply_double_convolution_1d(const Image& img,
                 if (y2 < 0)
                     y2 = 0;
 
-                result +=
-                    w * (tmp(i, y1, Channel::GRAY) + tmp(i, y2, Channel::GRAY));
+                result += w * (tmp(i, y1) + tmp(i, y2));
                 sum_w += 2.0 * w;
             }
             result /= sum_w;

@@ -139,3 +139,16 @@ bool Image::save(const std::string filename, const ImageFormat format) const {
 double Image::operator()(int x, int y, Channel c) const {
     return get_pixel(x, y, c);
 }
+
+/// @brief Indexing methods
+/// @param x x-coordinate
+/// @param y y-coordinate
+/// @return Pixel gray value
+double Image::operator()(int x, int y) const {
+    if (channels != 1) {
+        throw std::runtime_error(
+            "Error: accessing non-gray image without "
+            "specifying the channel");
+    }
+    return get_pixel(x, y, Channel::GRAY);
+}
