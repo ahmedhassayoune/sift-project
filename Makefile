@@ -5,6 +5,9 @@ CXX = g++
 CXXFLAGS_RELEASE = -Wall -Werror -Wshadow -std=c++17 -O3
 CXXFLAGS_DEBUG = -Wall -Werror -Wshadow -std=c++17 -O2 -g -fsanitize=address
 
+# Define linker flags
+LDFLAGS =
+
 # Define the output executable name
 TARGET = stab
 
@@ -31,7 +34,7 @@ debug: clean $(TARGET)
 
 # Link the object files to create the executable
 $(TARGET): $(OBJS)
-	$(CXX) $(CXXFLAGS) -o $@ $^
+	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
 
 # Compile source files into object files
 %.o: %.cpp $(HEADERS)

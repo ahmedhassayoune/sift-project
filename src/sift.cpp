@@ -163,7 +163,7 @@ std::vector<Image> compute_gaussian_octave(
     for (size_t i = 1; i < gaussian_images.size(); ++i) {
         double sigma = gaussian_kernels[i];
         Image new_gaussian_image =
-            apply_gaussian_blur(gaussian_images[i - 1], sigma);
+            apply_gaussian_blur_fast(gaussian_images[i - 1], sigma);
         gaussian_images[i] = new_gaussian_image;
     }
 

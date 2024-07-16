@@ -161,52 +161,51 @@ Image apply_double_convolution_1d(const Image& img,
     }
 
     int kernel_size = kernel.size();
-    int kernel_radius = kernel_size / 2;
+    Image tmp(img.width, img.height, img.channels);
     Image new_img(img.width, img.height, img.channels);
 
     // Apply horizontal pass
-    for (int i = 0; i < new_img.width; i++) {
-        for (int j = 0; j < new_img.height; j++) {
-            double result = img(i, j, Channel::GRAY) * kernel[kernel_radius];
-            double sum_w = kernel[kernel_radius];
-            for (int u = 1; u <= kernel_radius; u++) {
+    for (int i = 0; i < tmp.width; i++) {
+        for (int j = 0; j < tmp.height; j++) {
+            double result = img(i, j, Channel::GRAY) * kernel[0];
+            double sum_w = kernel[0];
+            for (int u = 1; u <= kernel_size; u++) {
+                double w = kernel[u];
                 int x1 = i + u;
                 int x2 = i - u;
-                if (x1 < img.width) {
-                    result +=
-                        img(x1, j, Channel::GRAY) * kernel[kernel_radius + u];
-                    sum_w += kernel[kernel_radius + u];
-                }
-                if (x2 >= 0) {
-                    result +=
-                        img(x2, j, Channel::GRAY) * kernel[kernel_radius - u];
-                    sum_w += kernel[kernel_radius - u];
-                }
+
+                if (x1 >= img.width)
+                    x1 = img.width - 1;
+                if (x2 < 0)
+                    x2 = 0;
+
+                result +=
+                    w * (img(x1, j, Channel::GRAY) + img(x2, j, Channel::GRAY));
+                sum_w += 2.0 * w;
             }
             result /= sum_w;
-            new_img.set_pixel(i, j, Channel::GRAY, result);
+            tmp.set_pixel(i, j, Channel::GRAY, result);
         }
     }
 
     // Apply vertical pass
     for (int i = 0; i < new_img.width; i++) {
         for (int j = 0; j < new_img.height; j++) {
-            double result =
-                new_img(i, j, Channel::GRAY) * kernel[kernel_radius];
-            double sum_w = kernel[kernel_radius];
-            for (int v = 1; v <= kernel_radius; v++) {
-                int y1 = j + v;
-                int y2 = j - v;
-                if (y1 < img.height) {
-                    result += new_img(i, y1, Channel::GRAY) *
-                              kernel[kernel_radius + v];
-                    sum_w += kernel[kernel_radius + v];
-                }
-                if (y2 >= 0) {
-                    result += new_img(i, y2, Channel::GRAY) *
-                              kernel[kernel_radius - v];
-                    sum_w += kernel[kernel_radius - v];
-                }
+            double result = tmp(i, j, Channel::GRAY) * kernel[0];
+            double sum_w = kernel[0];
+            for (int u = 1; u <= kernel_size; u++) {
+                double w = kernel[u];
+                int y1 = j + u;
+                int y2 = j - u;
+
+                if (y1 >= tmp.height)
+                    y1 = tmp.height - 1;
+                if (y2 < 0)
+                    y2 = 0;
+
+                result +=
+                    w * (tmp(i, y1, Channel::GRAY) + tmp(i, y2, Channel::GRAY));
+                sum_w += 2.0 * w;
             }
             result /= sum_w;
             new_img.set_pixel(i, j, Channel::GRAY, result);
@@ -226,17 +225,15 @@ Image apply_gaussian_blur_fast(const Image& img, double sigma) {
             "Convolution only supported for grayscale images");
     }
 
-    int kernel_size = 2 * static_cast<int>(std::ceil(3 * sigma)) + 1;
+    int kernel_size = static_cast<int>(std::ceil(3 * sigma)) + 1;
     std::vector<double> kernel(kernel_size);
-    double sum = 0.0;
-    double coef = 1 / (std::sqrt(2 * M_PI) * sigma);
+
     double exp_denom = 2 * sigma * sigma;
+    double coef = 1 / (std::sqrt(2 * M_PI) * sigma);
 
     // Compute the Gaussian kernel
     for (int i = 0; i < kernel_size; i++) {
-        int x = i - kernel_size / 2;
-        kernel[i] = std::exp(-x * x / exp_denom) * coef;
-        sum += kernel[i];
+        kernel[i] = std::exp(-i * i / exp_denom) * coef;
     }
 
     return apply_double_convolution_1d(img, kernel);
