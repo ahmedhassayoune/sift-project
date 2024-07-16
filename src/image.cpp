@@ -169,7 +169,7 @@ Image apply_double_convolution_1d(const Image& img,
         for (int j = 0; j < tmp.height; j++) {
             double result = img(i, j, Channel::GRAY) * kernel[0];
             double sum_w = kernel[0];
-            for (int u = 1; u <= kernel_size; u++) {
+            for (int u = 1; u < kernel_size; u++) {
                 double w = kernel[u];
                 int x1 = i + u;
                 int x2 = i - u;
@@ -193,7 +193,7 @@ Image apply_double_convolution_1d(const Image& img,
         for (int j = 0; j < new_img.height; j++) {
             double result = tmp(i, j, Channel::GRAY) * kernel[0];
             double sum_w = kernel[0];
-            for (int u = 1; u <= kernel_size; u++) {
+            for (int u = 1; u < kernel_size; u++) {
                 double w = kernel[u];
                 int y1 = j + u;
                 int y2 = j - u;

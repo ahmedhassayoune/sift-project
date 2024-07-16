@@ -334,9 +334,6 @@ std::vector<Keypoint> compute_keypoints(
     const int window_size, const int intervals, const double contrast_threshold,
     const double eigen_ratio) {
     std::vector<Keypoint> keypoints;
-    const int width = dog_images[0][0].width;
-    const int height = dog_images[0][0].height;
-    const int depth = dog_images[0].size();
     const int border = window_size / 2;
 
     int count = 0;
@@ -350,8 +347,12 @@ std::vector<Keypoint> compute_keypoints(
         int layer = std::get<2>(e);
         int octave = std::get<3>(e);
 
-        Vector offset;
         auto dog_octave = dog_images[octave];
+        const int depth = dog_octave.size();
+        const int width = dog_octave[0].width;
+        const int height = dog_octave[0].height;
+
+        Vector offset;
         int step;
         for (step = 0; step < MAX_CONVERGENCE_STEPS; ++step) {
             PixelCube pixel_cube = get_pixel_cube(dog_octave, x, y, layer);
