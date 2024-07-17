@@ -23,7 +23,7 @@ struct Image {
     int width;
     int height;
     int channels;
-    std::vector<float> data;
+    std::vector<double> data;
 
     Image();
     Image(int w, int h, int c);
@@ -34,13 +34,14 @@ struct Image {
     Image& operator=(const Image& other);
     size_t size() const;
 
-    float get_pixel(int x, int y, Channel c) const;
-    void set_pixel(int x, int y, Channel c, float value);
+    double get_pixel(int x, int y, Channel c) const;
+    void set_pixel(int x, int y, Channel c, double value);
     bool save(const char* filename, const ImageFormat format = PNG) const;
     bool save(const std::string filename, const ImageFormat format = PNG) const;
 
     // Indexing methods
-    float operator()(int x, int y, Channel c) const;
+    double operator()(int x, int y, Channel c) const;
+    double operator()(int x, int y) const;
 
     // Drawing methods
     void draw_point(int x, int y, int size, int color = RED);

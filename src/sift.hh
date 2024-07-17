@@ -5,20 +5,20 @@
 #define M_PI2 6.283185307179586
 
 #define MAX_CONVERGENCE_STEPS 5
-#define CONVERGENCE_THR 0.5f
+#define CONVERGENCE_THR 0.5
 #define ORI_SMOOTH_ITERATIONS 2
 #define DESC_HIST_WIDTH 4
 #define DESC_HIST_BINS 8
-#define DESC_MAGNITUDE_THR 0.2f
-#define INT_DESCR_FCTR 512.0f
+#define DESC_MAGNITUDE_THR 0.2
+#define INT_DESCR_FCTR 512.0
 
 struct Keypoint {
-    float x;     // continuous x-coordinate in input image
-    float y;     // continuous y-coordinate in input image
-    int octave;  // octave index
-    int layer;   // layer index within the octave
-    float size;  // size of the keypoint
-    float pori;  // principal orientation in radians [0, 2*pi]
+    double x;     // continuous x-coordinate in input image
+    double y;     // continuous y-coordinate in input image
+    int octave;   // octave index
+    int layer;    // layer index within the octave
+    double size;  // size of the keypoint
+    double pori;  // principal orientation in radians [0, 2*pi]
 
     uint8_t desc[128];  // 128-byte descriptor
 
@@ -55,26 +55,27 @@ struct Keypoint {
 struct KeypointMatch {
     Keypoint kp1;
     Keypoint kp2;
-    float distance;
+    double distance;
 
     KeypointMatch(const Keypoint& keypoint1, const Keypoint& keypoint2,
-                  float dist)
+                  double dist)
         : kp1(keypoint1), kp2(keypoint2), distance(dist) {}
 };
 
 std::vector<Keypoint> detect_keypoints_and_descriptors(
-    const Image& img, const float init_sigma = 1.6f, const int intervals = 3,
-    const int window_size = 3, const float contrast_threshold = 0.04f,
-    const float eigen_ratio = 10.0f, const float num_bins = 36,
-    const float peak_ratio = 0.8f, const float ori_sigma_factor = 1.5f,
-    const float desc_scale_factor = 3.0f);
+    const Image& img, const bool double_image_size = true,
+    const double init_sigma = 1.6, const int intervals = 3,
+    const int window_size = 3, const double contrast_threshold = 0.04,
+    const double eigen_ratio = 10.0, const double num_bins = 36,
+    const double peak_ratio = 0.8, const double ori_sigma_factor = 1.5,
+    const double desc_scale_factor = 3.0);
 
 std::vector<KeypointMatch> match_keypoints(
     const std::vector<Keypoint>& keypoints1,
-    const std::vector<Keypoint>& keypoints2, float ratio_threshold = 0.75f);
+    const std::vector<Keypoint>& keypoints2, double ratio_threshold = 0.75);
 
 void draw_keypoints(Image& img, const std::vector<Keypoint>& keypoints,
-                    float scales_count);
+                    double scales_count);
 
 void draw_matches(const Image& a, const Image& b,
                   std::vector<KeypointMatch> matches);
