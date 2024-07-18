@@ -9,4 +9,9 @@ The SIFT algorithm will be used for video stabilization.
 
 ## How to run the project
 
-TODO
+You can run the project by running the following commands:
+
+```bash
+make all
+./sift <path_to_image1> <path_to_image2>
+```

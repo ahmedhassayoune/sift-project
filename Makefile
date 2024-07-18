@@ -9,7 +9,7 @@ CXXFLAGS_DEBUG = -Wall -Werror -Wshadow -std=c++17 -O2 -g -fsanitize=address
 LDFLAGS =
 
 # Define the output executable name
-TARGET = stab
+TARGET = sift
 
 # Define the source directory
 SRC_DIR = src
