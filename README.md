@@ -1,6 +1,7 @@
 # TIFO - SIFT project
-This project is led by @etienne2509 and @ahmedhassayoune at french software engineering school EPITA.
+This project is led by [@ahmedhassayoune](https://github.com/ahmedhassayoune) and [@etienne2509](https://github.com/etienne2509) at french software engineering school EPITA.
 It is a C++ implementation of the SIFT algorithm, a computer vision algorithm that extracts keypoints and computes their descriptors.
+The SIFT algorithm was later used to apply image stitching from a collection of images. This work can be seen in the `stitching/sift_stitch.ipynb` notebook.
 
 ## How to run the project
 You can run the project by running the following commands:
