@@ -24,7 +24,7 @@ make all
       <img src="stitching/results/scene_1_frag.png" width="400">
     </td>
     <td>
-      <img src="stitching/results/scene_1_stit.png" width="300">
+      <img src="stitching/results/scene_1_stit.png" width="350">
     </td>
   </tr>
   <tr>
@@ -32,7 +32,7 @@ make all
       <img src="stitching/results/scene_2_frag.png" width="400">
     </td>
     <td>
-      <img src="stitching/results/scene_2_stit.png" width="300">
+      <img src="stitching/results/scene_2_stit.png" width="350">
     </td>
   </tr>
   <tr>
@@ -40,7 +40,7 @@ make all
       <img src="stitching/results/scene_3_frag.png" width="400">
     </td>
     <td>
-      <img src="stitching/results/scene_3_stit.png" width="300">
+      <img src="stitching/results/scene_3_stit.png" width="350">
     </td>
   </tr>
 </table>
